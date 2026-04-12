@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>하이드로겔 TF 프로젝트 관리</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- =====================================================
+     🔥 FIREBASE 설정 방법 (아래 3단계 따라하기)
+     
+     1단계: https://console.firebase.google.com 접속
+            → 새 프로젝트 만들기 → 이름: "hydrogel-tf"
+     
+     2단계: 프로젝트 설정 → 웹 앱 추가(</>) → 앱 등록
+            → 아래 firebaseConfig 값을 복사해서 붙여넣기
+     
+     3단계: Realtime Database → 만들기 → 테스트 모드 선택
+            → 규칙 탭 → 아래 규칙으로 교체 후 게시:
+            {
+              "rules": {
+                ".read": true,
+                ".write": true
+              }
+            }
+     ===================================================== -->
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, push, update, remove, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAM5fvzsNPeOhLrCtlyTR7fAOGGs7Gx_Ao",
+    authDomain: "hydrogel-tf.firebaseapp.com",
+    databaseURL: "https://hydrogel-tf-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "hydrogel-tf",
+    storageBucket: "hydrogel-tf.firebasestorage.app",
+    messagingSenderId: "218819811814",
+    appId: "1:218819811814:web:7fb93aa7f1e3c740b8de27",
+    measurementId: "G-WRY45T89M0"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // DB 참조
+  const tasksRef = ref(db, 'tasks');
+  const membersRef = ref(db, 'members');
+  const activityRef = ref(db, 'activity');
+  const commentsRef = ref(db, 'comments');
+  const onlineRef = ref(db, 'online');
+
+  // Firebase 함수들을 전역으로 노출
+  window._fb = {
+    db, ref, onValue, set, push, update, remove, serverTimestamp,
+    tasksRef, membersRef, activityRef, commentsRef, onlineRef,
+    isConnected: false
+  };
+
+  // 연결 감지
+  import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js").then(({ ref: refFn, onValue: onValFn }) => {
+    const connRef = refFn(db, '.info/connected');
+    onValFn(connRef, (snap) => {
+      window._fb.isConnected = snap.val() === true;
+      if (window._appReady) window._appReady();
+    });
+  });
+</script>
+
+<style>
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface2: #f0f2f5;
+  --border: #e2e6ea;
+  --accent: #2563eb;
+  --accent2: #7c3aed;
+  --green: #059669;
+  --yellow: #d97706;
+  --red: #dc2626;
+  --orange: #ea580c;
+  --text: #111827;
+  --text2: #4b5563;
+  --text3: #9ca3af;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Noto Sans KR',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+/* SETUP SCREEN */
+.setup-screen {
+  position:fixed; inset:0; background:var(--bg); z-index:9999;
+  display:flex; align-items:center; justify-content:center;
+}
+.setup-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:16px; padding:36px; width:520px; max-width:95vw;
+}
+.setup-card h2 { font-size:20px; font-weight:700; margin-bottom:6px; }
+.setup-card p { font-size:13px; color:var(--text2); margin-bottom:24px; line-height:1.6; }
+.step-block {
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:10px; padding:16px; margin-bottom:12px;
+}
+.step-num {
+  display:inline-block; width:22px; height:22px; border-radius:50%;
+  background:var(--accent); color:#000; font-size:11px; font-weight:700;
+  text-align:center; line-height:22px; margin-right:8px;
+}
+.step-block h3 { font-size:13px; font-weight:700; margin-bottom:8px; display:inline; }
+.step-block p { font-size:12px; color:var(--text2); margin-bottom:0; margin-top:6px; }
+.step-block code {
+  display:block; background:var(--bg); border-radius:6px; padding:10px 12px;
+  font-family:'Space Mono',monospace; font-size:11px; color:var(--accent);
+  margin-top:8px; white-space:pre; overflow-x:auto;
+}
+.config-input {
+  width:100%; background:var(--bg); border:1px solid var(--border);
+  border-radius:8px; color:var(--text); font-family:'Space Mono',monospace;
+  font-size:11px; padding:10px 12px; margin-top:8px; resize:vertical;
+  min-height:180px; outline:none; line-height:1.6;
+}
+.config-input:focus { border-color:var(--accent); }
+.setup-btn {
+  width:100%; padding:12px; background:var(--accent); color:#fff;
+  border:none; border-radius:10px; font-size:14px; font-weight:700;
+  cursor:pointer; margin-top:16px;
+}
+.setup-btn:hover { background:#00b8d9; }
+.demo-btn {
+  width:100%; padding:10px; background:transparent; color:var(--text2);
+  border:1px solid var(--border); border-radius:10px; font-size:13px;
+  font-weight:500; cursor:pointer; margin-top:8px;
+}
+.demo-btn:hover { border-color:var(--text2); }
+
+/* SIDEBAR */
+.sidebar {
+  position:fixed; left:0; top:0; bottom:0; width:220px;
+  background:var(--surface); border-right:1px solid var(--border);
+  z-index:100; display:flex; flex-direction:column;
+}
+.logo { padding:20px 18px 16px; border-bottom:1px solid var(--border); }
+.logo-tag {
+  display:inline-block; background:linear-gradient(135deg,#2563eb,#7c3aed);
+  color:#fff; font-size:9px; font-weight:700; padding:2px 7px;
+  border-radius:4px; letter-spacing:1px; margin-bottom:6px;
+}
+.logo h1 { font-size:14px; font-weight:700; line-height:1.3; }
+.logo p { font-size:11px; color:var(--text3); margin-top:2px; }
+
+/* ONLINE USERS */
+.online-wrap {
+  padding:10px 18px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+}
+.online-label { font-size:10px; color:var(--text3); width:100%; margin-bottom:4px; }
+.online-dot {
+  width:28px; height:28px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700; position:relative;
+}
+.online-dot::after {
+  content:''; position:absolute; bottom:0; right:0;
+  width:8px; height:8px; border-radius:50%; background:var(--green);
+  border:2px solid #fff;
+}
+
+nav { flex:1; padding:10px 0; overflow-y:auto; }
+.nav-sect { padding:8px 18px 4px; font-size:10px; font-weight:700;
+  color:var(--text3); letter-spacing:1.5px; }
+.nav-item {
+  display:flex; align-items:center; gap:9px; padding:9px 18px;
+  cursor:pointer; font-size:13px; color:var(--text2);
+  transition:all 0.15s; border-left:2px solid transparent;
+}
+.nav-item:hover { color:var(--text); background:var(--surface2); }
+.nav-item.active { color:var(--accent); background:rgba(37,99,235,0.08); border-left-color:var(--accent); }
+.nav-ic { font-size:14px; width:18px; text-align:center; }
+.nav-badge {
+  margin-left:auto; background:var(--red); color:#fff;
+  font-size:9px; font-weight:700; padding:1px 5px; border-radius:8px;
+}
+
+.sidebar-bottom { padding:14px 18px; border-top:1px solid var(--border); }
+.user-select {
+  width:100%; background:var(--surface2); border:1px solid var(--border);
+  border-radius:8px; color:var(--text); font-size:12px; padding:6px 10px;
+  font-family:'Noto Sans KR',sans-serif; outline:none;
+}
+.user-select:focus { border-color:var(--accent); }
+
+.conn-dot {
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  margin-right:5px; vertical-align:middle;
+}
+
+/* MAIN */
+.main { margin-left:220px; min-height:100vh; }
+.topbar {
+  position:sticky; top:0; z-index:50;
+  background:rgba(255,255,255,0.97); backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);
+  padding:0 24px; height:56px; display:flex; align-items:center; gap:12px;
+}
+.page-title { font-size:15px; font-weight:700; flex:1; }
+.page-title span { color:var(--accent); }
+.sync-badge {
+  font-size:11px; padding:4px 10px; border-radius:16px;
+  display:flex; align-items:center; gap:5px;
+  font-family:'Space Mono',monospace;
+}
+.sync-ok { background:rgba(5,150,105,0.10); color:var(--green); border:1px solid rgba(5,150,105,0.3); }
+.sync-err { background:rgba(220,38,38,0.10); color:var(--red); border:1px solid rgba(220,38,38,0.3); }
+.sync-wait { background:rgba(217,119,6,0.10); color:var(--yellow); border:1px solid rgba(217,119,6,0.3); }
+.pulse { animation:pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.content { padding:24px; }
+.page { display:none; }
+.page.active { display:block; }
+
+/* STAT */
+.stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+.stat-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:16px; position:relative; overflow:hidden;
+}
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+.stat-card.blue::before { background:var(--accent); }
+.stat-card.green::before { background:var(--green); }
+.stat-card.yellow::before { background:var(--yellow); }
+.stat-card.red::before { background:var(--red); }
+.stat-label { font-size:10px; color:var(--text3); font-weight:600; letter-spacing:0.5px; margin-bottom:6px; }
+.stat-value { font-size:28px; font-weight:900; font-family:'Space Mono',monospace; }
+.stat-sub { font-size:10px; color:var(--text3); margin-top:4px; }
+
+/* TABLE */
+.tbl-wrap { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px; }
+.tbl-head { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.tbl-head h3 { font-size:13px; font-weight:700; }
+table { width:100%; border-collapse:collapse; }
+th { background:var(--surface2); font-size:10px; font-weight:600; color:var(--text3); padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); }
+td { padding:9px 12px; border-bottom:1px solid var(--border); font-size:12px; vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(37,99,235,0.04); }
+
+/* PROGRESS INLINE EDIT */
+.prog-cell { display:flex; align-items:center; gap:8px; min-width:140px; }
+.prog-bar-bg { flex:1; height:5px; background:#e5e7eb; border-radius:3px; overflow:hidden; cursor:pointer; }
+.prog-bar { height:100%; border-radius:3px; background:linear-gradient(90deg,var(--green),var(--accent)); transition:width 0.3s; }
+.prog-pct { font-size:10px; font-family:'Space Mono',monospace; color:var(--text3); width:28px; text-align:right; }
+.prog-slider {
+  -webkit-appearance:none; width:100px; height:5px;
+  border-radius:3px; background:#e5e7eb; outline:none; cursor:pointer;
+}
+.prog-slider::-webkit-slider-thumb {
+  -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+  background:var(--accent); cursor:pointer; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* BADGES */
+.badge { display:inline-block; font-size:10px; font-weight:600; padding:2px 8px; border-radius:12px; white-space:nowrap; }
+.badge-blue { background:rgba(37,99,235,0.10); color:var(--accent); }
+.badge-green { background:rgba(5,150,105,0.10); color:var(--green); }
+.badge-red { background:rgba(220,38,38,0.10); color:var(--red); }
+.badge-gray { background:rgba(156,163,175,0.20); color:var(--text3); }
+
+.action-tag { display:inline-block; font-size:10px; font-weight:600; padding:2px 8px; border-radius:4px; }
+
+/* FILTER */
+.filter-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+.filter-btn {
+  padding:5px 12px; border-radius:16px; font-size:12px;
+  border:1px solid var(--border); background:var(--surface);
+  color:var(--text2); cursor:pointer; transition:all 0.15s;
+  font-family:'Noto Sans KR',sans-serif;
+}
+.filter-btn:hover { border-color:var(--accent); color:var(--accent); }
+.filter-btn.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+.search-inp {
+  flex:1; max-width:220px; padding:5px 12px;
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:16px; color:var(--text); font-size:12px;
+  font-family:'Noto Sans KR',sans-serif; outline:none;
+}
+.search-inp:focus { border-color:var(--accent); }
+
+/* GANTT */
+.tl-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.tl-label { width:150px; flex-shrink:0; font-size:11px; color:var(--text2); text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tl-track { flex:1; height:20px; background:var(--surface2); border-radius:10px; position:relative; min-width:300px; cursor:pointer; }
+.tl-bar { position:absolute; height:100%; border-radius:10px; font-size:10px; font-weight:600; display:flex; align-items:center; padding:0 6px; overflow:hidden; white-space:nowrap; transition:opacity 0.2s; }
+.tl-bar:hover { opacity:0.8; }
+.tl-today { position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--red); z-index:2; border-radius:1px; }
+
+/* CALENDAR */
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); border-left:1px solid var(--border); }
+.cal-day-lbl { padding:6px; text-align:center; font-size:10px; font-weight:600; color:var(--text3); background:var(--surface2); border-right:1px solid var(--border); border-bottom:1px solid var(--border); }
+.cal-cell { border-right:1px solid var(--border); border-bottom:1px solid var(--border); min-height:80px; padding:5px; }
+.cal-num { font-size:11px; font-weight:500; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:3px; }
+.cal-today .cal-num { background:var(--accent); color:#000; font-weight:700; }
+.cal-other .cal-num { color:var(--text3); }
+.cal-ev { font-size:10px; padding:2px 5px; border-radius:3px; margin-bottom:2px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
+
+/* MEMBERS */
+.member-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
+.member-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px; display:flex; align-items:center; gap:10px; transition:all 0.15s; }
+.member-card:hover { border-color:rgba(0,212,255,0.3); }
+.avatar { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; flex-shrink:0; }
+
+/* ACTIVITY */
+.act-item { display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); align-items:baseline; }
+.act-item:last-child { border-bottom:none; }
+.act-who { font-size:12px; font-weight:700; white-space:nowrap; }
+.act-msg { font-size:12px; color:var(--text2); flex:1; }
+.act-time { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; white-space:nowrap; }
+
+/* COMMENTS */
+.comment { background:var(--surface2); border-radius:8px; padding:12px; margin-bottom:8px; }
+.comment-hd { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.comment-who { font-size:12px; font-weight:700; }
+.comment-when { font-size:10px; color:var(--text3); font-family:'Space Mono',monospace; }
+.comment-task-lnk { font-size:10px; color:var(--accent); margin-left:auto; cursor:pointer; }
+.comment-body { font-size:13px; color:var(--text2); line-height:1.5; }
+.comment-input-wrap { display:flex; gap:8px; margin-top:12px; }
+.comment-input {
+  flex:1; background:var(--surface2); border:1px solid var(--border);
+  border-radius:8px; color:var(--text); font-size:13px; padding:8px 12px;
+  font-family:'Noto Sans KR',sans-serif; outline:none;
+}
+.comment-input:focus { border-color:var(--accent); }
+
+/* MODAL */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:200; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+.modal-overlay.open { opacity:1; pointer-events:all; }
+.modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:560px; max-width:95vw; max-height:90vh; overflow-y:auto; padding:24px; transform:translateY(16px); transition:transform 0.2s; }
+.modal-overlay.open .modal { transform:translateY(0); }
+.modal h2 { font-size:15px; font-weight:700; margin-bottom:18px; }
+.fg { margin-bottom:12px; }
+.fg label { font-size:10px; font-weight:700; color:var(--text3); display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.5px; }
+.fg input,.fg select,.fg textarea { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; padding:7px 11px; font-family:'Noto Sans KR',monospace; outline:none; }
+.fg input:focus,.fg select:focus,.fg textarea:focus { border-color:var(--accent); }
+.fg textarea { resize:vertical; min-height:60px; }
+.fg-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.modal-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+.btn { padding:7px 16px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:none; transition:all 0.15s; font-family:'Noto Sans KR',sans-serif; }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:#1d4ed8; }
+.btn-danger { background:var(--red); color:#fff; }
+.btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border); }
+.btn-ghost:hover { border-color:var(--text2); }
+.btn-sm { padding:4px 10px; font-size:11px; border-radius:6px; }
+
+/* TOAST */
+.toast { position:fixed; bottom:20px; right:20px; background:var(--surface); border:1px solid var(--green); border-radius:8px; padding:10px 16px; font-size:12px; z-index:999; transform:translateY(60px); opacity:0; transition:all 0.25s; }
+.toast.show { transform:translateY(0); opacity:1; }
+
+/* SECTION HEADER */
+.sec-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.sec-title { font-size:13px; font-weight:700; }
+
+/* MONTHLY */
+.month-block { margin-bottom:20px; }
+.month-title { font-size:14px; font-weight:700; margin-bottom:10px; color:var(--text2); }
+
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+.empty { text-align:center; padding:32px; color:var(--text3); font-size:12px; }
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div class="setup-screen" id="setup-screen">
+  <div class="setup-card">
+    <h2>🔥 Firebase 연동 설정</h2>
+    <p>아래 3단계를 따라하면 팀원 모두가 실시간으로 같은 데이터를 공유할 수 있습니다.<br>이미 설정했다면 바로 "데모 모드로 시작"을 클릭하세요.</p>
+
+    <div class="step-block">
+      <span class="step-num">1</span><h3>Firebase 프로젝트 만들기</h3>
+      <p><a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a> 접속 → 새 프로젝트 → 이름: <strong>hydrogel-tf</strong></p>
+    </div>
+
+    <div class="step-block">
+      <span class="step-num">2</span><h3>Realtime Database 활성화</h3>
+      <p>프로젝트 → Realtime Database → 만들기 → 테스트 모드 선택<br>규칙 탭에서 아래 규칙으로 교체 후 게시:</p>
+      <code>{ "rules": { ".read": true, ".write": true } }</code>
+    </div>
+
+    <div class="step-block">
+      <span class="step-num">3</span><h3>Firebase Config 붙여넣기</h3>
+      <p>프로젝트 설정 → 웹 앱 추가(&lt;/&gt;) → firebaseConfig 복사 → 아래에 붙여넣기:</p>
+      <textarea class="config-input" id="config-input" placeholder='{
+  apiKey: "AIzaSy...",
+  authDomain: "hydrogel-tf.firebaseapp.com",
+  databaseURL: "https://hydrogel-tf-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "hydrogel-tf",
+  storageBucket: "hydrogel-tf.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abc123"
+}'></textarea>
+    </div>
+
+    <button class="setup-btn" onclick="applyConfig()">✅ Firebase 연결하고 시작</button>
+    <button class="demo-btn" onclick="startDemo()">💾 데모 모드로 시작 (로컬 전용)</button>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar" style="display:none">
+  <div class="logo">
+    <div class="logo-tag">HYDROGEL TF</div>
+    <h1>프로젝트<br>관리 시스템</h1>
+    <p>R&amp;I 연구소</p>
+  </div>
+  <div class="online-wrap" id="online-wrap">
+    <span class="online-label">접속중인 팀원</span>
+  </div>
+  <nav>
+    <div class="nav-sect">메인</div>
+    <div class="nav-item active" onclick="goPage('dashboard',this)"><span class="nav-ic">📊</span>대시보드</div>
+    <div class="nav-item" onclick="goPage('gantt',this)"><span class="nav-ic">📅</span>간트차트</div>
+    <div class="nav-item" onclick="goPage('calendar',this)"><span class="nav-ic">🗓</span>캘린더</div>
+    <div class="nav-sect">관리</div>
+    <div class="nav-item" onclick="goPage('tasks',this)"><span class="nav-ic">📋</span>업무관리 <span class="nav-badge" id="nb-task">0</span></div>
+    <div class="nav-item" onclick="goPage('members',this)"><span class="nav-ic">👥</span>인원정보</div>
+    <div class="nav-item" onclick="goPage('dept',this)"><span class="nav-ic">🏢</span>부서별</div>
+    <div class="nav-item" onclick="goPage('person',this)"><span class="nav-ic">🙋</span>담당자별</div>
+    <div class="nav-sect">팀 소통</div>
+    <div class="nav-item" onclick="goPage('activity',this)"><span class="nav-ic">⚡</span>활동로그</div>
+    <div class="nav-item" onclick="goPage('comments',this)"><span class="nav-ic">💬</span>댓글 <span class="nav-badge" id="nb-comment" style="display:none"></span></div>
+    <div class="nav-item" onclick="goPage('monthly',this)"><span class="nav-ic">📆</span>월별현황</div>
+  </nav>
+  <div class="sidebar-bottom">
+    <div style="font-size:10px;color:var(--text3);margin-bottom:5px">현재 접속자</div>
+    <select class="user-select" id="user-select" onchange="changeUser(this.value)">
+      <option value="김혜인">👤 김혜인 (연구원)</option>
+      <option value="김완중">👤 김완중 (팀장)</option>
+      <option value="윤석원">👤 윤석원 (책임)</option>
+      <option value="이준배">👤 이준배 (랩장)</option>
+      <option value="차지훈">👤 차지훈 (본부장)</option>
+      <option value="전명원">👤 전명원 (AI자동화)</option>
+      <option value="우용호">👤 우용호 (품질)</option>
+      <option value="오세임">👤 오세임 (품질)</option>
+    </select>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main" id="main-area" style="display:none">
+  <div class="topbar">
+    <div class="page-title"><span id="ptitle">대시보드</span></div>
+    <div class="sync-badge sync-wait" id="sync-badge"><span class="pulse">●</span> 연결 중...</div>
+    <button class="btn btn-ghost btn-sm" onclick="refreshAll()" style="font-size:11px">↻ 새로고침</button>
+    <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ 업무추가</button>
+  </div>
+  <div class="content">
+    <div class="page active" id="pg-dashboard"></div>
+    <div class="page" id="pg-gantt"></div>
+    <div class="page" id="pg-calendar"></div>
+    <div class="page" id="pg-tasks"></div>
+    <div class="page" id="pg-members"></div>
+    <div class="page" id="pg-dept"></div>
+    <div class="page" id="pg-person"></div>
+    <div class="page" id="pg-activity"></div>
+    <div class="page" id="pg-comments"></div>
+    <div class="page" id="pg-monthly"></div>
+  </div>
+</main>
+
+<!-- TASK MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 id="modal-title">업무 입력</h2>
+    <div class="fg">
+      <label>액션아이템</label>
+      <select id="f-action">
+        <option>리사이클</option><option>불량개선(줄불량)</option>
+        <option>불량개선(용량)</option><option>자동화</option><option>기타</option>
+      </select>
+    </div>
+    <div class="fg"><label>세부내용</label><input id="f-detail" placeholder="프로젝트 세부내용"></div>
+    <div class="fg-2">
+      <div class="fg"><label>담당자</label><select id="f-person"></select></div>
+      <div class="fg"><label>담당부서</label><select id="f-dept">
+        <option>R&I</option><option>HG본부</option><option>AI자동화</option>
+        <option>품질</option><option>공정기술</option><option>생산</option><option>숭실대</option>
+      </select></div>
+    </div>
+    <div class="fg-2">
+      <div class="fg"><label>시작일</label><input type="date" id="f-start" value="2026-04-13"></div>
+      <div class="fg"><label>종료일</label><input type="date" id="f-end"></div>
+    </div>
+    <div class="fg"><label>내용/목적</label><textarea id="f-content" placeholder="업무 상세 내용"></textarea></div>
+    <div class="fg-2">
+      <div class="fg"><label>협력부서</label><input id="f-collab" placeholder="예: 숭실대, 품질"></div>
+      <div class="fg"><label>진행률 (0~100)</label><input type="number" id="f-progress" min="0" max="100" value="0"></div>
+    </div>
+    <div class="fg"><label>비고</label><input id="f-note" placeholder="추가 메모"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">취소</button>
+      <button class="btn btn-danger" id="del-btn" style="display:none" onclick="confirmDelete()">삭제</button>
+      <button class="btn btn-primary" onclick="saveTask()">저장</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- MEMBER MODAL -->
+<div class="modal-overlay" id="member-modal">
+  <div class="modal" style="max-width:440px">
+    <h2 id="member-modal-title">인원 추가</h2>
+    <div class="fg"><label>성명</label><input id="m-name" placeholder="이름 입력"></div>
+    <div class="fg-2">
+      <div class="fg"><label>부서</label>
+        <select id="m-dept">
+          <option>R&I</option><option>HG본부</option><option>AI자동화</option>
+          <option>품질</option><option>공정기술</option><option>생산</option>
+          <option>제조</option><option>숭실대</option>
+        </select>
+      </div>
+      <div class="fg"><label>직책</label>
+        <select id="m-role">
+          <option>본부장</option><option>랩장</option><option>팀장</option>
+          <option>파트장</option><option>책임</option><option>과장</option>
+          <option>대리</option><option>주임</option><option>연구원</option>
+          <option>마스터</option><option>교수</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeMemberModal()">취소</button>
+      <button class="btn btn-danger" id="m-del-btn" style="display:none" onclick="confirmDeleteMember()">삭제</button>
+      <button class="btn btn-primary" onclick="saveMember()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// DATA & STATE
+// ============================================================
+const TODAY = new Date(2026,3,13);
+const TODAYSTR = '2026-04-13';
+
+let tasks = {}, members = {}, activity = [], comments = {};
+let curUser = '김혜인';
+let curPage = 'dashboard';
+let editId = null;
+let filterAction = '전체', filterPerson = '전체', taskSearch = '';
+let calY = 2026, calM = 4;
+let demoMode = false;
+let onlineUsers = {};
+
+// Default data
+const DEFAULT_TASKS = [
+  {id:'t1',action:'리사이클',detail:'Core protector - 조건별 연구소 테스트',person:'김혜인',dept:'R&I',start:'2026-04-08',end:'2026-04-14',content:'벌크보관온도60도기준 재생프로토콜 테스트',collab:'',progress:0.7,note:''},
+  {id:'t2',action:'리사이클',detail:'Core protector - 벌크분석',person:'김혜인',dept:'R&I',start:'2026-04-15',end:'2026-04-22',content:'pH,성분분석,경도,기타물성파악',collab:'숭실대',progress:0,note:''},
+  {id:'t3',action:'리사이클',detail:'Core protector - 현장화 검증',person:'김혜인',dept:'R&I',start:'2026-04-23',end:'2026-04-29',content:'파일럿테스트, 인라인믹서 필요',collab:'품질,공정기술,생산',progress:0,note:''},
+  {id:'t4',action:'리사이클',detail:'Core protector - 확장',person:'김혜인',dept:'R&I',start:'2026-04-30',end:'2026-05-14',content:'안정화 작업',collab:'품질,공정기술,생산',progress:0,note:''},
+  {id:'t5',action:'불량개선(줄불량)',detail:'필름개선 - 기존필름품질검증',person:'김완중',dept:'R&I',start:'2026-04-01',end:'2026-04-14',content:'OPP40, 펄지70, PET23, PET엠보 분석',collab:'숭실대',progress:0.8,note:''},
+  {id:'t6',action:'불량개선(줄불량)',detail:'필름개선 - 개선필름서치',person:'김완중',dept:'R&I',start:'2026-04-08',end:'2026-04-22',content:'Tg값 높은 Grade 서치',collab:'',progress:0.1,note:''},
+  {id:'t7',action:'불량개선(줄불량)',detail:'필름개선 - 개선필름 경제성비교',person:'김완중',dept:'R&I',start:'2026-04-15',end:'2026-04-22',content:'불량개선시 금액대비 필름가격 비교분석',collab:'생산(불량률분석)',progress:0,note:''},
+  {id:'t8',action:'불량개선(줄불량)',detail:'필름개선 - 개선필름품질검증',person:'김완중',dept:'R&I',start:'2026-04-23',end:'2026-04-30',content:'현장적용을 통한 불량개선 확인',collab:'생산,품질',progress:0,note:''},
+  {id:'t9',action:'자동화',detail:'숙성 - 제형수축개선방안 칼선변경비교실험',person:'윤석원',dept:'R&I',start:'2026-04-15',end:'2026-05-14',content:'자동화기기 칼 크기 매칭하여 재 테스트',collab:'',progress:0,note:''},
+  {id:'t10',action:'자동화',detail:'숙성 - 숙성시간 합리화',person:'윤석원',dept:'R&I',start:'2026-05-15',end:'2026-06-14',content:'즉시타공 가능여부 체크',collab:'AI자동화',progress:0,note:''},
+  {id:'t11',action:'리사이클',detail:'나노셀룰로오즈활용 - 재생벌크 샘플링',person:'김혜인',dept:'R&I',start:'2026-04-15',end:'2026-04-22',content:'Lattix gel 활용한 매트릭스 조밀도 강화',collab:'',progress:0,note:''},
+  {id:'t12',action:'리사이클',detail:'매트릭스보강 - 벌크분석',person:'김혜인',dept:'R&I',start:'2026-04-23',end:'2026-04-29',content:'재생진행시, 조밀도 유지여부 확인',collab:'숭실대',progress:0,note:''},
+  {id:'t13',action:'리사이클',detail:'매트릭스보강 - 현장화 검증',person:'김혜인',dept:'R&I',start:'2026-04-30',end:'2026-05-14',content:'현장적용을 통한 동일성 체크',collab:'생산,품질',progress:0,note:''},
+  {id:'t14',action:'불량개선(용량)',detail:'레이저 - 업체미팅을 통한 아이디어 확보',person:'김완중',dept:'R&I',start:'2026-04-15',end:'2026-04-29',content:'레이저 두께측정기 검토',collab:'숭실대,AI자동화',progress:0,note:''},
+  {id:'t15',action:'불량개선(용량)',detail:'레이저 - 도입에 따른 경제성 비교',person:'김완중',dept:'R&I',start:'2026-04-23',end:'2026-04-29',content:'도입의 실효성 검증',collab:'',progress:0,note:''},
+  {id:'t16',action:'불량개선(용량)',detail:'레이저 - 두께조정자동연동시스템구축',person:'김완중',dept:'R&I',start:'2026-04-29',end:'2026-07-14',content:'두께자동조정시스템 구축',collab:'AI자동화,생산,품질',progress:0,note:''},
+];
+const DEFAULT_MEMBERS = [
+  {id:'m1',name:'이준협',dept:'숭실대',role:'교수'},
+  {id:'m2',name:'차지훈',dept:'HG본부',role:'본부장'},
+  {id:'m3',name:'이준배',dept:'R&I',role:'랩장'},
+  {id:'m4',name:'김완중',dept:'R&I',role:'팀장'},
+  {id:'m5',name:'윤석원',dept:'R&I',role:'책임'},
+  {id:'m6',name:'김혜인',dept:'R&I',role:'연구원'},
+  {id:'m7',name:'전명원',dept:'AI자동화',role:'팀장'},
+  {id:'m8',name:'우용호',dept:'품질',role:'파트장'},
+  {id:'m9',name:'오세임',dept:'품질',role:'대리'},
+  {id:'m10',name:'백승현',dept:'공정기술',role:'과장'},
+  {id:'m11',name:'오현우',dept:'공정기술',role:'마스터'},
+  {id:'m12',name:'강창엽',dept:'생산',role:'과장'},
+  {id:'m13',name:'오혜성',dept:'제조',role:'주임'},
+];
+
+const AC = {'리사이클':'#1D9E75','불량개선(줄불량)':'#E24B4A','불량개선(용량)':'#BA7517','자동화':'#7F77DD','기타':'#888780'};
+const DC = {'R&I':'#378ADD','HG본부':'#7F77DD','AI자동화':'#1D9E75','품질':'#BA7517','공정기술':'#D85A30','생산':'#E24B4A','숭실대':'#888780','제조':'#D4537E'};
+const AVC = ['#378ADD','#7F77DD','#1D9E75','#BA7517','#E24B4A','#D85A30','#D4537E','#0F6E56'];
+
+// ============================================================
+// SETUP — Firebase config is embedded, auto-start on load
+// ============================================================
+function startApp() {
+  demoMode = true;
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('sidebar').style.display = 'flex';
+  document.getElementById('main-area').style.display = 'block';
+
+  DEFAULT_TASKS.forEach(t => { tasks[t.id] = t; });
+  DEFAULT_MEMBERS.forEach(m => { members[m.id] = m; });
+
+  setSyncStatus('demo');
+  renderAll();
+
+  // Connect Firebase (SDK loads async)
+  const tryFb = () => {
+    if (window._fb && window._fb.onValue) { initFirebase(); }
+    else { setTimeout(tryFb, 300); }
+  };
+  setTimeout(tryFb, 400);
+}
+
+function applyConfig() { startApp(); }
+function startDemo() { startApp(); }
+
+window.addEventListener('DOMContentLoaded', () => { setTimeout(startApp, 300); });
+
+// ============================================================
+// FIREBASE
+// ============================================================
+function initFirebase() {
+  if (demoMode && window._fb && window._fb.onValue) {
+    const fb = window._fb;
+    // Listen to tasks
+    fb.onValue(fb.tasksRef, snap => {
+      const d = snap.val();
+      if (d) { tasks = d; } else { pushDefaultsToFb(); }
+      renderAll();
+      setSyncStatus('ok');
+    });
+    fb.onValue(fb.membersRef, snap => {
+      const d = snap.val();
+      if (d) { members = d; }
+      if (curPage === 'members') renderPage(curPage);
+    });
+    fb.onValue(fb.activityRef, snap => {
+      const d = snap.val();
+      activity = d ? (Array.isArray(d) ? d : Object.values(d).reverse()) : [];
+      if (curPage === 'activity') renderPage(curPage);
+    });
+    fb.onValue(fb.commentsRef, snap => {
+      const d = snap.val();
+      comments = d || {};
+      const cnt = Object.keys(comments).length;
+      const nb = document.getElementById('nb-comment');
+      nb.textContent = cnt; nb.style.display = cnt ? '' : 'none';
+      if (curPage === 'comments') renderPage(curPage);
+    });
+    // Online presence
+    const myRef = fb.ref(fb.db, `online/${curUser.replace(/\s/g,'_')}`);
+    fb.set(myRef, { name: curUser, ts: Date.now() });
+    fb.onValue(fb.onlineRef, snap => {
+      onlineUsers = snap.val() || {};
+      renderOnline();
+    });
+    setSyncStatus('ok');
+  }
+}
+
+async function pushDefaultsToFb() {
+  if (!window._fb || !window._fb.set) return;
+  const fb = window._fb;
+  const taskObj = {};
+  DEFAULT_TASKS.forEach(t => { taskObj[t.id] = t; });
+  const memObj = {};
+  DEFAULT_MEMBERS.forEach(m => { memObj[m.id] = m; });
+  await fb.set(fb.tasksRef, taskObj);
+  await fb.set(fb.membersRef, memObj);
+}
+
+async function fbSet(path, val) {
+  if (window._fb && window._fb.ref && window._fb.set && window._fb.isConnected) {
+    const r = window._fb.ref(window._fb.db, path);
+    await window._fb.set(r, val);
+  }
+}
+
+async function fbRemove(path) {
+  if (window._fb && window._fb.ref && window._fb.remove && window._fb.isConnected) {
+    const r = window._fb.ref(window._fb.db, path);
+    await window._fb.remove(r);
+  }
+}
+
+async function fbPush(path, val) {
+  if (window._fb && window._fb.ref && window._fb.push && window._fb.isConnected) {
+    const r = window._fb.ref(window._fb.db, path);
+    await window._fb.push(r, val);
+  }
+}
+
+function setSyncStatus(state) {
+  const el = document.getElementById('sync-badge');
+  if (state === 'ok') { el.className = 'sync-badge sync-ok'; el.innerHTML = '● 실시간 공유중'; }
+  else if (state === 'demo') { el.className = 'sync-badge sync-wait'; el.innerHTML = '◎ 데모 모드 (로컬)'; }
+  else { el.className = 'sync-badge sync-err'; el.innerHTML = '<span class="pulse">●</span> 연결 오류'; }
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function avColor(name) {
+  let h = 0; for (let c of name) h += c.charCodeAt(0);
+  return AVC[h % AVC.length];
+}
+
+function taskArr() { return Object.values(tasks); }
+function memberArr() { return Object.values(members); }
+function commentArr() { return Object.values(comments).sort((a,b) => b.ts - a.ts); }
+
+function getStatus(t) {
+  const s = new Date(t.start), e = new Date(t.end);
+  if (t.progress >= 1) return 'done';
+  if (TODAY > e) return 'delay';
+  if (TODAY >= s && TODAY <= e) return 'ongoing';
+  return 'pending';
+}
+
+function statusBadge(t) {
+  const s = getStatus(t);
+  if (s === 'done') return '<span class="badge badge-green">✓ 완료</span>';
+  if (s === 'delay') return '<span class="badge badge-red">⚠ 지연</span>';
+  if (s === 'ongoing') return '<span class="badge badge-blue">● 진행중</span>';
+  return '<span class="badge badge-gray">○ 예정</span>';
+}
+
+function actionTag(a) {
+  const c = AC[a] || '#888';
+  return `<span class="action-tag" style="background:${c}20;color:${c}">${a}</span>`;
+}
+
+function timeStr() {
+  const n = new Date();
+  return `${n.getMonth()+1}/${n.getDate()} ${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+}
+
+async function logActivity(msg) {
+  const item = { who: curUser, msg, time: timeStr(), ts: Date.now() };
+  activity.unshift(item);
+  if (activity.length > 80) activity.pop();
+  await fbPush('activity', item);
+}
+
+function toast(msg, ok=true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = ok ? 'var(--green)' : 'var(--red)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ============================================================
+// NAV
+// ============================================================
+function goPage(id, el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('pg-' + id).classList.add('active');
+  const names = { dashboard:'대시보드',gantt:'간트차트',calendar:'캘린더',tasks:'업무관리',
+    members:'인원정보',dept:'부서별 관리',person:'담당자별 관리',activity:'활동 로그',comments:'댓글',monthly:'월별 현황' };
+  document.getElementById('ptitle').textContent = names[id] || id;
+  curPage = id;
+  renderPage(id);
+}
+
+function renderAll() {
+  document.getElementById('nb-task').textContent = taskArr().length;
+  renderPage(curPage);
+}
+
+function renderPage(p) {
+  if (p === 'dashboard') renderDash();
+  else if (p === 'gantt') renderGantt();
+  else if (p === 'calendar') renderCal();
+  else if (p === 'tasks') renderTasks();
+  else if (p === 'members') renderMembers();
+  else if (p === 'dept') renderDept();
+  else if (p === 'person') renderPerson();
+  else if (p === 'activity') renderActivity();
+  else if (p === 'comments') renderComments();
+  else if (p === 'monthly') renderMonthly();
+}
+
+function refreshAll() {
+  if (!demoMode) return;
+  toast('새로고침 완료');
+  renderAll();
+}
+
+// ============================================================
+// ONLINE
+// ============================================================
+function renderOnline() {
+  const wrap = document.getElementById('online-wrap');
+  const now = Date.now();
+  const online = Object.values(onlineUsers).filter(u => now - u.ts < 60000);
+  wrap.innerHTML = '<span class="online-label">접속중인 팀원</span>' +
+    (online.length ? online.map(u => `
+      <div class="online-dot" style="background:${avColor(u.name)}20;color:${avColor(u.name)}" title="${u.name}">${u.name[0]}</div>
+    `).join('') : '<span style="font-size:11px;color:var(--text3)">-</span>');
+}
+
+function changeUser(v) {
+  curUser = v;
+  if (window._fb && window._fb.set) {
+    const r = window._fb.ref(window._fb.db, `online/${v.replace(/\s/g,'_')}`);
+    window._fb.set(r, { name: v, ts: Date.now() });
+  }
+  toast(`${v}(으)로 전환되었습니다`);
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function renderDash() {
+  const arr = taskArr();
+  const ongoing = arr.filter(t => getStatus(t) === 'ongoing').length;
+  const done = arr.filter(t => getStatus(t) === 'done').length;
+  const delay = arr.filter(t => getStatus(t) === 'delay').length;
+  const pmap = {};
+  arr.forEach(t => { pmap[t.person] = (pmap[t.person]||0)+1; });
+  const amap = {};
+  arr.forEach(t => { amap[t.action] = (amap[t.action]||0)+1; });
+  const activeArr = arr.filter(t => getStatus(t) === 'ongoing' || getStatus(t) === 'delay');
+
+  document.getElementById('pg-dashboard').innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card blue"><div class="stat-label">전체 업무</div><div class="stat-value">${arr.length}</div><div class="stat-sub">등록된 프로젝트</div></div>
+      <div class="stat-card blue"><div class="stat-label">진행중</div><div class="stat-value">${ongoing}</div><div class="stat-sub">현재 진행 중</div></div>
+      <div class="stat-card green"><div class="stat-label">완료</div><div class="stat-value">${done}</div><div class="stat-sub">완료된 업무</div></div>
+      <div class="stat-card red"><div class="stat-label">지연</div><div class="stat-value">${delay}</div><div class="stat-sub">기한 초과</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div class="tbl-wrap" style="padding:16px">
+        <div class="sec-title" style="margin-bottom:12px">담당자별 업무량</div>
+        ${Object.entries(pmap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div style="width:26px;height:26px;border-radius:50%;background:${avColor(k)};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">${k[0]}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;margin-bottom:2px">${k}</div>
+              <div style="height:4px;background:var(--surface2);border-radius:2px;overflow:hidden">
+                <div style="height:100%;background:${avColor(k)};width:${v/Math.max(...Object.values(pmap))*100}%;border-radius:2px;transition:width 0.5s"></div>
+              </div>
+            </div>
+            <span style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text3)">${v}</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="tbl-wrap" style="padding:16px">
+        <div class="sec-title" style="margin-bottom:12px">액션아이템 분포</div>
+        ${Object.entries(amap).map(([k,v])=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:${AC[k]||'#888'};flex-shrink:0"></div>
+            <div style="font-size:12px;flex:1">${k}</div>
+            <div style="height:4px;width:80px;background:var(--surface2);border-radius:2px;overflow:hidden">
+              <div style="height:100%;background:${AC[k]||'#888'};width:${v/arr.length*100}%;border-radius:2px"></div>
+            </div>
+            <span style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text3)">${v}</span>
+          </div>
+        `).join('')}
+        <div style="margin-top:14px">
+          <div class="sec-title" style="margin-bottom:8px">최근 활동</div>
+          ${activity.slice(0,4).map(a=>`
+            <div style="font-size:11px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border)">
+              <strong style="color:var(--text)">${a.who}</strong> ${a.msg}
+              <span style="color:var(--text3);float:right;font-family:'Space Mono',monospace">${a.time}</span>
+            </div>
+          `).join('') || '<div style="font-size:11px;color:var(--text3)">활동 없음</div>'}
+        </div>
+      </div>
+    </div>
+    <div class="sec-hd"><div class="sec-title">🔥 진행중/지연 업무 (${activeArr.length}건)</div></div>
+    <div class="tbl-wrap">
+      <table><thead><tr><th>액션</th><th>세부내용</th><th>담당자</th><th>종료일</th><th>진행률 (클릭해서 수정)</th><th>상태</th></tr></thead>
+      <tbody>${activeArr.length ? activeArr.map(t=>`
+        <tr>
+          <td>${actionTag(t.action)}</td>
+          <td style="max-width:200px"><div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.detail}</div><div style="font-size:10px;color:var(--text3)">${t.content||''}</div></td>
+          <td><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:50%;background:${avColor(t.person)};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff">${t.person[0]}</div>${t.person}</div></td>
+          <td style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text2)">${t.end}</td>
+          <td>${progressCell(t)}</td>
+          <td>${statusBadge(t)}</td>
+        </tr>`).join('') : '<tr><td colspan="6" class="empty">진행중인 업무 없음</td></tr>'}
+      </tbody></table>
+    </div>
+  `;
+}
+
+// ============================================================
+// PROGRESS CELL — 핵심: 슬라이더로 즉시 수정 가능
+// ============================================================
+function progressCell(t) {
+  const pct = Math.round(t.progress * 100);
+  return `<div class="prog-cell">
+    <div class="prog-bar-bg" title="드래그해서 진행률 변경">
+      <div class="prog-bar" style="width:${pct}%"></div>
+    </div>
+    <input type="range" class="prog-slider" min="0" max="100" value="${pct}"
+      data-id="${t.id}"
+      onchange="updateProgress('${t.id}', this.value)"
+      oninput="this.previousElementSibling.querySelector('.prog-bar').style.width=this.value+'%';this.nextElementSibling.textContent=this.value+'%'">
+    <span class="prog-pct">${pct}%</span>
+  </div>`;
+}
+
+async function updateProgress(id, val) {
+  const pct = parseInt(val);
+  const progress = pct / 100;
+  const old = tasks[id];
+  if (!old) return;
+  tasks[id] = { ...old, progress };
+  // Firebase update
+  await fbSet(`tasks/${id}/progress`, progress);
+  await logActivity(`"${old.detail.slice(0,20)}" 진행률 → ${pct}%`);
+  toast(`✅ ${old.person}님의 진행률이 ${pct}%로 업데이트되었습니다`);
+  if (curPage === 'dashboard') renderDash();
+  else if (curPage === 'tasks') renderTasks();
+}
+
+// ============================================================
+// GANTT
+// ============================================================
+function renderGantt() {
+  const arr = taskArr();
+  const acts = ['전체', ...new Set(arr.map(t=>t.action))];
+  const ppl = ['전체', ...new Set(arr.map(t=>t.person))];
+  const filtered = arr.filter(t =>
+    (filterAction==='전체'||t.action===filterAction) &&
+    (filterPerson==='전체'||t.person===filterPerson) &&
+    (!taskSearch || t.detail.includes(taskSearch) || t.person.includes(taskSearch))
+  );
+  const allD = filtered.flatMap(t=>[new Date(t.start),new Date(t.end)]);
+  const minD = allD.length ? new Date(Math.min(...allD)) : new Date(2026,3,1);
+  const maxD = allD.length ? new Date(Math.max(...allD)) : new Date(2026,6,30);
+  minD.setDate(minD.getDate()-5); maxD.setDate(maxD.getDate()+5);
+  const span = maxD - minD;
+  const todayPct = Math.max(0, Math.min(100, (TODAY-minD)/span*100));
+
+  document.getElementById('pg-gantt').innerHTML = `
+    <div class="filter-bar">
+      ${acts.map(a=>`<button class="filter-btn ${filterAction===a?'on':''}" onclick="setAF('${a}')">${a}</button>`).join('')}
+      <span style="color:var(--border);font-size:16px;padding:0 4px">|</span>
+      ${ppl.map(p=>`<button class="filter-btn ${filterPerson===p?'on':''}" onclick="setPF('${p}')">${p}</button>`).join('')}
+      <input class="search-inp" style="margin-left:auto" placeholder="🔍 검색..." value="${taskSearch}" oninput="setSR(this.value)">
+    </div>
+    <div class="tbl-wrap" style="padding:16px;overflow-x:auto">
+      <div style="min-width:500px">
+        ${filtered.map(t => {
+          const s = new Date(t.start), e = new Date(t.end);
+          const left = (s-minD)/span*100;
+          const width = Math.max(1,(e-s)/span*100);
+          const st = getStatus(t);
+          const bc = st==='done'?'#1D9E75':st==='delay'?'#E24B4A':st==='ongoing'?'#378ADD':'#4a5568';
+          return `<div class="tl-row">
+            <div class="tl-label" title="${t.person}: ${t.detail}">${t.person}: ${t.detail.length>18?t.detail.slice(0,16)+'…':t.detail}</div>
+            <div class="tl-track" onclick="openEditModal('${t.id}')" title="${t.detail}\n${t.start} ~ ${t.end}\n진행률: ${Math.round(t.progress*100)}%">
+              <div class="tl-today" style="left:${todayPct}%"></div>
+              <div class="tl-bar" style="left:${left}%;width:${width}%;background:${bc};color:${st==='pending'?'#94a3b8':'#fff'}">
+                ${width>8?t.detail.slice(0,12):''}
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+        ${!filtered.length?'<div class="empty">해당 조건의 업무 없음</div>':''}
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// CALENDAR
+// ============================================================
+function renderCal() {
+  const first = new Date(calY,calM-1,1).getDay();
+  const days = new Date(calY,calM,0).getDate();
+  document.getElementById('pg-calendar').innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <button class="btn btn-ghost btn-sm" onclick="calNav(-1)">◀</button>
+      <span style="font-size:15px;font-weight:700;font-family:'Space Mono',monospace">${calY}년 ${calM}월</span>
+      <button class="btn btn-ghost btn-sm" onclick="calNav(1)">▶</button>
+      <button class="btn btn-ghost btn-sm" onclick="calNav(0)">오늘</button>
+    </div>
+    <div class="tbl-wrap" style="overflow:hidden">
+      <div class="cal-grid">
+        ${['일','월','화','수','목','금','토'].map(d=>`<div class="cal-day-lbl">${d}</div>`).join('')}
+        ${Array(first).fill('<div class="cal-cell cal-other"><div class="cal-num"></div></div>').join('')}
+        ${Array.from({length:days},(_,i)=>{
+          const d = i+1;
+          const ds = `${calY}-${String(calM).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const isTd = calY===2026&&calM===4&&d===13;
+          const dt = taskArr().filter(t=>ds>=t.start&&ds<=t.end);
+          return `<div class="cal-cell${isTd?' cal-today':''}">
+            <div class="cal-num">${d}</div>
+            ${dt.slice(0,3).map(t=>{const c=AC[t.action]||'#888';return`<div class="cal-ev" style="background:${c}20;color:${c}" onclick="openEditModal('${t.id}')" title="${t.detail}">${t.person}: ${t.detail.slice(0,10)}</div>`;}).join('')}
+            ${dt.length>3?`<div style="font-size:9px;color:var(--text3)">+${dt.length-3}건</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function calNav(d) {
+  if(d===0){calY=2026;calM=4;}
+  else{calM+=d;if(calM>12){calM=1;calY++;}if(calM<1){calM=12;calY--;}}
+  renderCal();
+}
+
+// ============================================================
+// TASKS
+// ============================================================
+function renderTasks() {
+  const arr = taskArr();
+  const acts = ['전체',...new Set(arr.map(t=>t.action))];
+  const ppl = ['전체',...new Set(arr.map(t=>t.person))];
+  const filtered = arr.filter(t=>
+    (filterAction==='전체'||t.action===filterAction)&&
+    (filterPerson==='전체'||t.person===filterPerson)&&
+    (!taskSearch||t.detail.includes(taskSearch)||t.person.includes(taskSearch)||t.action.includes(taskSearch))
+  );
+  document.getElementById('pg-tasks').innerHTML = `
+    <div class="filter-bar">
+      ${acts.map(a=>`<button class="filter-btn ${filterAction===a?'on':''}" onclick="setAF('${a}')">${a}</button>`).join('')}
+      <span style="color:var(--border);font-size:16px;padding:0 4px">|</span>
+      ${ppl.map(p=>`<button class="filter-btn ${filterPerson===p?'on':''}" onclick="setPF('${p}')">${p}</button>`).join('')}
+      <input class="search-inp" style="margin-left:auto" placeholder="🔍 검색..." value="${taskSearch}" oninput="setSR(this.value)">
+    </div>
+    <div class="tbl-wrap">
+      <div class="tbl-head"><h3>업무 목록 (${filtered.length}건)</h3></div>
+      <table><thead><tr><th>액션</th><th>세부내용</th><th>담당자</th><th>시작</th><th>종료</th><th>협력</th><th>진행률 (슬라이더로 수정)</th><th>상태</th><th></th></tr></thead>
+      <tbody>${filtered.length ? filtered.map(t=>`
+        <tr>
+          <td>${actionTag(t.action)}</td>
+          <td style="max-width:180px"><div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.detail}</div><div style="font-size:10px;color:var(--text3)">${t.content||''}</div></td>
+          <td><div style="display:flex;align-items:center;gap:5px"><div style="width:20px;height:20px;border-radius:50%;background:${avColor(t.person)};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff">${t.person[0]}</div>${t.person}</div></td>
+          <td style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text2)">${t.start}</td>
+          <td style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text2)">${t.end}</td>
+          <td style="font-size:10px;color:var(--text3)">${t.collab||'-'}</td>
+          <td>${progressCell(t)}</td>
+          <td>${statusBadge(t)}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="openEditModal('${t.id}')">수정</button></td>
+        </tr>`).join('') : '<tr><td colspan="9" class="empty">업무 없음</td></tr>'}
+      </tbody></table>
+    </div>`;
+}
+
+// ============================================================
+// MEMBERS
+// ============================================================
+let editMemberId = null;
+
+function renderMembers() {
+  const arr = memberArr();
+  document.getElementById('pg-members').innerHTML = `
+    <div class="sec-hd">
+      <div class="sec-title">TF 인원 현황 (${arr.length}명)</div>
+      <button class="btn btn-primary btn-sm" onclick="openAddMemberModal()">+ 인원 추가</button>
+    </div>
+    <div class="member-grid">
+      ${arr.map(m=>{
+        const tc = taskArr().filter(t=>t.person===m.name).length;
+        const c = avColor(m.name);
+        return `<div class="member-card" style="cursor:pointer" onclick="openEditMemberModal('${m.id}')">
+          <div class="avatar" style="background:${c}18;color:${c}">${m.name[0]}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700">${m.name}</div>
+            <div style="font-size:11px;color:var(--text2)">${m.dept} · ${m.role}</div>
+            ${tc?`<div style="font-size:11px;color:var(--accent);font-family:'Space Mono',monospace;margin-top:2px">${tc}건 담당</div>`:''}
+          </div>
+          <div style="font-size:10px;color:var(--text3);flex-shrink:0">✏️</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function openAddMemberModal() {
+  editMemberId = null;
+  document.getElementById('member-modal-title').textContent = '인원 추가';
+  document.getElementById('m-del-btn').style.display = 'none';
+  document.getElementById('m-name').value = '';
+  document.getElementById('m-dept').value = 'R&I';
+  document.getElementById('m-role').value = '연구원';
+  document.getElementById('member-modal').classList.add('open');
+}
+
+function openEditMemberModal(id) {
+  const m = members[id]; if (!m) return;
+  editMemberId = id;
+  document.getElementById('member-modal-title').textContent = '인원 수정';
+  document.getElementById('m-del-btn').style.display = '';
+  document.getElementById('m-name').value = m.name;
+  document.getElementById('m-dept').value = m.dept;
+  document.getElementById('m-role').value = m.role;
+  document.getElementById('member-modal').classList.add('open');
+}
+
+function closeMemberModal() {
+  document.getElementById('member-modal').classList.remove('open');
+}
+
+async function saveMember() {
+  const name = document.getElementById('m-name').value.trim();
+  const dept = document.getElementById('m-dept').value;
+  const role = document.getElementById('m-role').value;
+  if (!name) { toast('이름을 입력하세요', false); return; }
+
+  if (editMemberId) {
+    const updated = { ...members[editMemberId], name, dept, role };
+    members[editMemberId] = updated;
+    await fbSet(`members/${editMemberId}`, updated);
+    await logActivity(`인원 수정: ${name} (${dept}·${role})`);
+    toast(`✅ ${name}님 정보가 수정되었습니다`);
+  } else {
+    const id = 'm' + Date.now();
+    const newMember = { id, name, dept, role };
+    members[id] = newMember;
+    await fbSet(`members/${id}`, newMember);
+    await logActivity(`인원 추가: ${name} (${dept}·${role})`);
+    toast(`✅ ${name}님이 추가되었습니다`);
+  }
+  closeMemberModal();
+  renderMembers();
+}
+
+async function confirmDeleteMember() {
+  const m = members[editMemberId]; if (!m) return;
+  if (!confirm(`${m.name}님을 인원에서 삭제하시겠습니까?`)) return;
+  delete members[editMemberId];
+  await fbRemove(`members/${editMemberId}`);
+  await logActivity(`인원 삭제: ${m.name}`);
+  toast(`🗑 ${m.name}님이 삭제되었습니다`);
+  closeMemberModal();
+  renderMembers();
+}
+
+// ============================================================
+// DEPT
+// ============================================================
+function renderDept() {
+  const depts = [...new Set(taskArr().map(t=>t.dept))];
+  document.getElementById('pg-dept').innerHTML = depts.map(d => {
+    const dt = taskArr().filter(t=>t.dept===d);
+    const c = DC[d]||'#888';
+    return `<div class="month-block">
+      <div class="month-title" style="display:flex;align-items:center;gap:8px">
+        <div style="width:8px;height:8px;border-radius:50%;background:${c}"></div>${d} (${dt.length}건)
+      </div>
+      <div class="tbl-wrap"><table><thead><tr><th>액션</th><th>세부내용</th><th>담당자</th><th>시작</th><th>종료</th><th>진행률</th><th>상태</th></tr></thead>
+      <tbody>${dt.map(t=>`<tr>
+        <td>${actionTag(t.action)}</td>
+        <td style="font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.detail}</td>
+        <td>${t.person}</td>
+        <td style="font-size:11px;color:var(--text2)">${t.start}</td>
+        <td style="font-size:11px;color:var(--text2)">${t.end}</td>
+        <td>${progressCell(t)}</td>
+        <td>${statusBadge(t)}</td>
+      </tr>`).join('')}</tbody></table></div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// PERSON
+// ============================================================
+function renderPerson() {
+  const people = [...new Set(taskArr().map(t=>t.person))];
+  document.getElementById('pg-person').innerHTML = people.map(p => {
+    const pt = taskArr().filter(t=>t.person===p);
+    const m = memberArr().find(x=>x.name===p)||{};
+    const c = avColor(p);
+    return `<div class="month-block">
+      <div class="month-title" style="display:flex;align-items:center;gap:10px">
+        <div style="width:28px;height:28px;border-radius:50%;background:${c}20;color:${c};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${p[0]}</div>
+        ${p} <span style="font-size:12px;color:var(--text3);font-weight:400">${m.dept||''} · ${m.role||''} · ${pt.length}건</span>
+      </div>
+      <div class="tbl-wrap"><table><thead><tr><th>액션</th><th>세부내용</th><th>시작</th><th>종료</th><th>내용</th><th>협력</th><th>진행률</th><th>상태</th></tr></thead>
+      <tbody>${pt.map(t=>`<tr>
+        <td>${actionTag(t.action)}</td>
+        <td style="font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.detail}</td>
+        <td style="font-size:11px;color:var(--text2)">${t.start}</td>
+        <td style="font-size:11px;color:var(--text2)">${t.end}</td>
+        <td style="font-size:10px;color:var(--text3);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.content||''}</td>
+        <td style="font-size:10px;color:var(--text3)">${t.collab||'-'}</td>
+        <td>${progressCell(t)}</td>
+        <td>${statusBadge(t)}</td>
+      </tr>`).join('')}</tbody></table></div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// ACTIVITY
+// ============================================================
+function renderActivity() {
+  document.getElementById('pg-activity').innerHTML = activity.length ? `
+    <div class="tbl-wrap" style="padding:16px">
+      ${activity.map(a=>`<div class="act-item">
+        <span class="act-who">${a.who}</span>
+        <span class="act-msg">${a.msg}</span>
+        <span class="act-time">${a.time}</span>
+      </div>`).join('')}
+    </div>` : '<div class="empty">활동 기록 없음</div>';
+}
+
+// ============================================================
+// COMMENTS
+// ============================================================
+function renderComments() {
+  const arr = commentArr();
+  const opts = taskArr().map(t=>`<option value="${t.id}">${t.detail.slice(0,35)}</option>`).join('');
+  document.getElementById('pg-comments').innerHTML = `
+    <div class="tbl-wrap" style="padding:16px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:10px">댓글 작성</div>
+      <select id="cm-task" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:12px;font-family:'Noto Sans KR',sans-serif;margin-bottom:8px;outline:none">
+        <option value="">업무 선택 (선택사항)</option>${opts}
+      </select>
+      <div class="comment-input-wrap">
+        <input class="comment-input" id="cm-input" placeholder="팀원들과 메모를 공유하세요..." onkeydown="if(event.key==='Enter')addComment()">
+        <button class="btn btn-primary" onclick="addComment()">등록</button>
+      </div>
+    </div>
+    ${arr.length ? arr.map(c=>{
+      const t = c.taskId ? taskArr().find(x=>x.id===c.taskId) : null;
+      const co = avColor(c.who);
+      return`<div class="comment">
+        <div class="comment-hd">
+          <div style="width:22px;height:22px;border-radius:50%;background:${co}20;color:${co};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${c.who[0]}</div>
+          <span class="comment-who">${c.who}</span>
+          <span class="comment-when">${c.time}</span>
+          ${t?`<span class="comment-task-lnk" onclick="openEditModal('${t.id}')" title="${t.detail}">▸ ${t.detail.slice(0,25)}</span>`:''}
+        </div>
+        <div class="comment-body">${c.text}</div>
+      </div>`;
+    }).join('') : '<div class="empty">아직 댓글이 없습니다. 팀원들과 소통해보세요!</div>'}`;
+}
+
+async function addComment() {
+  const text = document.getElementById('cm-input').value.trim();
+  if (!text) return;
+  const taskId = document.getElementById('cm-task').value || null;
+  const c = { who: curUser, text, taskId, time: timeStr(), ts: Date.now() };
+  await fbPush('comments', c);
+  comments['local_'+Date.now()] = c;
+  const nb = document.getElementById('nb-comment');
+  const cnt = Object.keys(comments).length;
+  nb.textContent = cnt; nb.style.display = '';
+  await logActivity(`댓글 작성: "${text.slice(0,20)}"`);
+  document.getElementById('cm-input').value = '';
+  toast('💬 댓글이 등록되었습니다');
+  renderComments();
+}
+
+// ============================================================
+// MONTHLY
+// ============================================================
+function renderMonthly() {
+  const mmap = {};
+  taskArr().forEach(t => {
+    [t.start.slice(0,7), t.end.slice(0,7)].forEach(m => {
+      if (!mmap[m]) mmap[m] = new Set();
+      mmap[m].add(t.id);
+    });
+  });
+  document.getElementById('pg-monthly').innerHTML = Object.entries(mmap).sort().map(([ym,ids])=>{
+    const [yr,mo] = ym.split('-');
+    const mt = [...ids].map(id=>tasks[id]).filter(Boolean);
+    return `<div class="month-block">
+      <div class="month-title">${yr}년 ${parseInt(mo)}월 · ${mt.length}건</div>
+      <div class="tbl-wrap"><table><thead><tr><th>액션</th><th>세부내용</th><th>담당자</th><th>시작</th><th>종료</th><th>진행률</th><th>상태</th></tr></thead>
+      <tbody>${mt.map(t=>`<tr>
+        <td>${actionTag(t.action)}</td>
+        <td style="font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.detail}</td>
+        <td>${t.person}</td>
+        <td style="font-size:11px;color:var(--text2)">${t.start}</td>
+        <td style="font-size:11px;color:var(--text2)">${t.end}</td>
+        <td>${progressCell(t)}</td>
+        <td>${statusBadge(t)}</td>
+      </tr>`).join('')}</tbody></table></div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+function openAddModal() {
+  editId = null;
+  document.getElementById('modal-title').textContent = '✏️ 업무 입력';
+  document.getElementById('del-btn').style.display = 'none';
+  document.getElementById('f-action').value = '리사이클';
+  document.getElementById('f-detail').value = '';
+  document.getElementById('f-content').value = '';
+  document.getElementById('f-collab').value = '';
+  document.getElementById('f-note').value = '';
+  document.getElementById('f-progress').value = 0;
+  document.getElementById('f-start').value = TODAYSTR;
+  document.getElementById('f-end').value = '';
+  populatePersonSelect(null);
+  document.getElementById('modal').classList.add('open');
+}
+
+function openEditModal(id) {
+  const t = tasks[id]; if (!t) return;
+  editId = id;
+  document.getElementById('modal-title').textContent = '✏️ 업무 수정';
+  document.getElementById('del-btn').style.display = '';
+  document.getElementById('f-action').value = t.action;
+  document.getElementById('f-detail').value = t.detail;
+  document.getElementById('f-start').value = t.start;
+  document.getElementById('f-end').value = t.end;
+  document.getElementById('f-content').value = t.content||'';
+  document.getElementById('f-collab').value = t.collab||'';
+  document.getElementById('f-note').value = t.note||'';
+  document.getElementById('f-progress').value = Math.round(t.progress*100);
+  document.getElementById('f-dept').value = t.dept||'R&I';
+  populatePersonSelect(t.person);
+  document.getElementById('modal').classList.add('open');
+}
+
+function populatePersonSelect(selected) {
+  const sel = document.getElementById('f-person');
+  sel.innerHTML = memberArr().map(m =>
+    `<option value="${m.name}" ${m.name===selected?'selected':''}>${m.name} (${m.dept}·${m.role})</option>`
+  ).join('');
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+async function saveTask() {
+  const action = document.getElementById('f-action').value;
+  const detail = document.getElementById('f-detail').value.trim();
+  const person = document.getElementById('f-person').value;
+  const dept = document.getElementById('f-dept').value;
+  const start = document.getElementById('f-start').value;
+  const end = document.getElementById('f-end').value;
+  const content = document.getElementById('f-content').value.trim();
+  const collab = document.getElementById('f-collab').value.trim();
+  const note = document.getElementById('f-note').value.trim();
+  const progress = Math.min(1, Math.max(0, parseInt(document.getElementById('f-progress').value)||0) / 100);
+
+  if (!detail || !start || !end) { toast('세부내용, 시작/종료일을 입력하세요', false); return; }
+
+  if (editId) {
+    const updated = { ...tasks[editId], action, detail, person, dept, start, end, content, collab, note, progress };
+    tasks[editId] = updated;
+    await fbSet(`tasks/${editId}`, updated);
+    await logActivity(`"${detail.slice(0,20)}" 수정`);
+    toast('✅ 업무가 수정되었습니다');
+  } else {
+    const id = 't' + Date.now();
+    const newTask = { id, action, detail, person, dept, start, end, content, collab, note, progress };
+    tasks[id] = newTask;
+    await fbSet(`tasks/${id}`, newTask);
+    await logActivity(`"${detail.slice(0,20)}" 업무 추가`);
+    document.getElementById('nb-task').textContent = taskArr().length;
+    toast('✅ 업무가 추가되었습니다');
+  }
+  closeModal();
+  renderAll();
+}
+
+async function confirmDelete() {
+  if (!editId) return;
+  if (!confirm('이 업무를 삭제하시겠습니까?')) return;
+  const detail = tasks[editId]?.detail||'';
+  delete tasks[editId];
+  await fbRemove(`tasks/${editId}`);
+  await logActivity(`"${detail.slice(0,20)}" 삭제`);
+  document.getElementById('nb-task').textContent = taskArr().length;
+  toast('🗑 삭제되었습니다');
+  closeModal();
+  renderAll();
+}
+
+// FILTER
+function setAF(a) { filterAction = a; renderPage(curPage); }
+function setPF(p) { filterPerson = p; renderPage(curPage); }
+function setSR(v) { taskSearch = v; renderPage(curPage); }
+
+// CLOSE MODAL ON OVERLAY
+document.getElementById('modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+document.getElementById('member-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeMemberModal(); });
+</script>
+</body>
+</html>
