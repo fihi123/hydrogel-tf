@@ -306,34 +306,36 @@ async function updateProgress(id,val){const p=parseInt(val)/100,old=tasks[id];if
 function setSyncStatus(s){const el=document.getElementById("sync-badge");if(s==="ok"){el.className="sync-badge sync-ok";el.innerHTML="● 실시간 공유중";}else if(s==="demo"){el.className="sync-badge sync-wait";el.innerHTML="◎ 로컬 모드";}else{el.className="sync-badge sync-err";el.innerHTML='<span class="pulse">●</span> 연결 오류';}}
 function initFirebase(){
   const fb=window._fb;
-  if(!fb||!fb.onValue){console.warn("FB not ready");return;}
+  if(!fb||!fb.onValue){console.warn("FB not ready");setSyncStatus("demo");return;}
   console.log("Firebase 연결 시작...");
+  let connected=false;
+  const connTimeout=setTimeout(()=>{if(!connected){setSyncStatus("err");}},10000);
   fb.onValue(fb.tasksRef,snap=>{
+    connected=true;clearTimeout(connTimeout);
     const d=snap.val();
     if(d){tasks=d;}else{const o={};DT.forEach(t=>{o[t.id]=t;});fb.set(fb.tasksRef,o);}
     renderAll();setSyncStatus("ok");
-  });
+  },err=>{console.error("tasks listener error",err);clearTimeout(connTimeout);setSyncStatus("err");});
   fb.onValue(fb.membersRef,snap=>{
     const d=snap.val();
     if(d){members=d;}else{const o={};DM.forEach(m=>{o[m.id]=m;});fb.set(fb.membersRef,o);}
     populateUserSelect();
     if(curPage==="members")renderPage("members");
-  });
+  },err=>{console.error("members listener error",err);});
   fb.onValue(fb.activityRef,snap=>{
     const d=snap.val();
     activity=d?(Array.isArray(d)?d:Object.values(d).reverse()):[];
     if(curPage==="activity")renderPage("activity");
-  });
+  },err=>{console.error("activity listener error",err);});
   fb.onValue(fb.commentsRef,snap=>{
     const d=snap.val();comments=d||{};
     const cnt=Object.keys(comments).length;
     const nb=document.getElementById("nb-comment");
     nb.textContent=cnt;nb.style.display=cnt?"":"none";
     if(curPage==="comments")renderPage("comments");
-  });
-  fb.onValue(fb.onlineRef,snap=>{onlineUsers=snap.val()||{};renderOnline();});
+  },err=>{console.error("comments listener error",err);});
+  fb.onValue(fb.onlineRef,snap=>{onlineUsers=snap.val()||{};renderOnline();},err=>{console.error("online listener error",err);});
   fb.set(fb.ref(fb.db,"online/"+curUser.replace(/\s/g,"_")),{name:curUser,ts:Date.now()});
-  setSyncStatus("ok");
 }
 async function fbSet(path,val){try{if(window._fb){await window._fb.set(window._fb.ref(window._fb.db,path),val);}}catch(e){console.error("fbSet error",e);}}
 async function fbRemove(path){try{if(window._fb){await window._fb.remove(window._fb.ref(window._fb.db,path));}}catch(e){console.error("fbRemove error",e);}}
@@ -354,7 +356,7 @@ function startApp(){
     let tries=0;
     const poll=setInterval(()=>{
       if(window._fb){clearInterval(poll);initFirebase();}
-      if(++tries>20)clearInterval(poll);
+      if(++tries>20){clearInterval(poll);setSyncStatus("err");}
     },500);
   }
 }
