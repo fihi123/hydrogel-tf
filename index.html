@@ -26,7 +26,7 @@
   import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js").then(({ref:rFn,onValue:oFn})=>{
     oFn(rFn(db,".info/connected"),snap=>{ window._fb.isConnected=snap.val()===true; if(window._appReady)window._appReady(); });
   });
-<\/script>
+</script>
 <style>
 :root{--bg:#f5f6f8;--surface:#fff;--surface2:#f0f2f5;--border:#e2e6ea;--accent:#2563eb;--accent2:#7c3aed;--green:#059669;--yellow:#d97706;--red:#dc2626;--orange:#ea580c;--text:#111827;--text2:#4b5563;--text3:#9ca3af;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -341,6 +341,6 @@ function setSR(v){taskSearch=v;renderPage(curPage);}
 function toast(msg,ok=true){const el=document.getElementById("toast");el.textContent=msg;el.style.borderColor=ok?"var(--green)":"var(--red)";el.classList.add("show");setTimeout(()=>el.classList.remove("show"),2800);}
 document.getElementById("modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeModal();});
 document.getElementById("member-modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeMemberModal();});
-<\/script>
+</script>
 </body>
 </html>
