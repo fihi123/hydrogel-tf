@@ -216,7 +216,7 @@ tr:hover td{background:rgba(37,99,235,.04);}
     <div class="fg"><label>세부내용</label><input id="f-detail" placeholder="프로젝트 세부내용"></div>
     <div class="fg-2">
       <div class="fg"><label>담당자</label><select id="f-person"></select></div>
-      <div class="fg"><label>담당부서</label><select id="f-dept"><option>R&I</option><option>HG본부</option><option>AI자동화</option><option>품질</option><option>공정기술</option><option>생산</option><option>숭실대</option></select></div>
+      <div class="fg"><label>담당부서</label><select id="f-dept"><option>R&I</option><option>HG본부</option><option>AI자동화</option><option>품질</option><option>공정개발</option><option>생산</option><option>숭실대</option></select></div>
     </div>
     <div class="fg-2">
       <div class="fg"><label>시작일</label><input type="date" id="f-start" value="2026-04-13"></div>
@@ -240,7 +240,7 @@ tr:hover td{background:rgba(37,99,235,.04);}
     <h2 id="member-modal-title">인원 추가</h2>
     <div class="fg"><label>성명</label><input id="m-name" placeholder="이름 입력"></div>
     <div class="fg-2">
-      <div class="fg"><label>부서</label><select id="m-dept"><option>R&I</option><option>HG본부</option><option>AI자동화</option><option>품질</option><option>공정기술</option><option>생산</option><option>제조</option><option>숭실대</option></select></div>
+      <div class="fg"><label>부서</label><select id="m-dept"><option>R&I</option><option>HG본부</option><option>AI자동화</option><option>품질</option><option>공정개발</option><option>생산</option><option>제조</option><option>숭실대</option></select></div>
       <div class="fg"><label>직책</label><select id="m-role"><option>본부장</option><option>랩장</option><option>팀장</option><option>파트장</option><option>책임</option><option>과장</option><option>대리</option><option>주임</option><option>연구원</option><option>마스터</option><option>교수</option></select></div>
     </div>
     <div class="modal-foot">
@@ -258,13 +258,13 @@ let curUser="김혜인",curPage="dashboard",editId=null,editMemberId=null;
 let filterAction="전체",filterPerson="전체",taskSearch="";
 let calY=2026,calM=4,onlineUsers={};
 const AC={"리사이클":"#1D9E75","불량개선(줄불량)":"#E24B4A","불량개선(용량)":"#BA7517","자동화":"#7F77DD","기타":"#888780"};
-const DC={"R&I":"#378ADD","HG본부":"#7F77DD","AI자동화":"#1D9E75","품질":"#BA7517","공정기술":"#D85A30","생산":"#E24B4A","숭실대":"#888780","제조":"#D4537E"};
+const DC={"R&I":"#378ADD","HG본부":"#7F77DD","AI자동화":"#1D9E75","품질":"#BA7517","공정개발":"#D85A30","생산":"#E24B4A","숭실대":"#888780","제조":"#D4537E"};
 const AVC=["#378ADD","#7F77DD","#1D9E75","#BA7517","#E24B4A","#D85A30","#D4537E","#0F6E56"];
 const DT=[
   {id:"t1",action:"리사이클",detail:"Core protector - 조건별 연구소 테스트",person:"김혜인",dept:"R&I",start:"2026-04-08",end:"2026-04-14",content:"벌크보관온도60도기준 재생프로토콜 테스트",collab:"",progress:0.7,note:""},
   {id:"t2",action:"리사이클",detail:"Core protector - 벌크분석",person:"김혜인",dept:"R&I",start:"2026-04-15",end:"2026-04-22",content:"pH,성분분석,경도,기타물성파악",collab:"숭실대",progress:0,note:""},
-  {id:"t3",action:"리사이클",detail:"Core protector - 현장화 검증",person:"김혜인",dept:"R&I",start:"2026-04-23",end:"2026-04-29",content:"파일럿테스트, 인라인믹서 필요",collab:"품질,공정기술,생산",progress:0,note:""},
-  {id:"t4",action:"리사이클",detail:"Core protector - 확장",person:"김혜인",dept:"R&I",start:"2026-04-30",end:"2026-05-14",content:"안정화 작업",collab:"품질,공정기술,생산",progress:0,note:""},
+  {id:"t3",action:"리사이클",detail:"Core protector - 현장화 검증",person:"김혜인",dept:"R&I",start:"2026-04-23",end:"2026-04-29",content:"파일럿테스트, 인라인믹서 필요",collab:"품질,공정개발,생산",progress:0,note:""},
+  {id:"t4",action:"리사이클",detail:"Core protector - 확장",person:"김혜인",dept:"R&I",start:"2026-04-30",end:"2026-05-14",content:"안정화 작업",collab:"품질,공정개발,생산",progress:0,note:""},
   {id:"t5",action:"불량개선(줄불량)",detail:"필름개선 - 기존필름품질검증",person:"김완중",dept:"R&I",start:"2026-04-01",end:"2026-04-14",content:"OPP40, 펄지70, PET23, PET엠보 분석",collab:"숭실대",progress:0.8,note:""},
   {id:"t6",action:"불량개선(줄불량)",detail:"필름개선 - 개선필름서치",person:"김완중",dept:"R&I",start:"2026-04-08",end:"2026-04-22",content:"Tg값 높은 Grade 서치",collab:"",progress:0.1,note:""},
   {id:"t7",action:"불량개선(줄불량)",detail:"필름개선 - 개선필름 경제성비교",person:"김완중",dept:"R&I",start:"2026-04-15",end:"2026-04-22",content:"불량개선시 금액대비 필름가격 비교분석",collab:"생산(불량률분석)",progress:0,note:""},
@@ -288,8 +288,8 @@ const DM=[
   {id:"m7",name:"전명원",dept:"AI자동화",role:"팀장"},
   {id:"m8",name:"우용호",dept:"품질",role:"파트장"},
   {id:"m9",name:"오세임",dept:"품질",role:"대리"},
-  {id:"m10",name:"백승현",dept:"공정기술",role:"과장"},
-  {id:"m11",name:"오현우",dept:"공정기술",role:"마스터"},
+  {id:"m10",name:"백승현",dept:"공정개발",role:"과장"},
+  {id:"m11",name:"오현우",dept:"공정개발",role:"마스터"},
   {id:"m12",name:"강창엽",dept:"생산",role:"과장"},
   {id:"m13",name:"오혜성",dept:"제조",role:"주임"}
 ];
