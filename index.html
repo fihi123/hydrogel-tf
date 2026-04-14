@@ -8,6 +8,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getDatabase, ref, onValue, set, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   const firebaseConfig = {
     apiKey: "AIzaSyAM5fvzsNPeOhLrCtlyTR7fAOGGs7Gx_Ao",
     authDomain: "hydrogel-tf.firebaseapp.com",
@@ -20,7 +21,8 @@
   try {
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    window._fb = { db, ref, onValue, set, push, remove,
+    const auth = getAuth(app);
+    window._fb = { db, ref, onValue, set, push, remove, auth, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword,
       tasksRef: ref(db,"tasks"), membersRef: ref(db,"members"),
       activityRef: ref(db,"activity"), commentsRef: ref(db,"comments"),
       actionsRef: ref(db,"actions"),
@@ -154,9 +156,40 @@ tr:hover td{background:rgba(37,99,235,.04);}
 .empty{text-align:center;padding:32px;color:var(--text3);font-size:12px;}
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 50%,#7c3aed 100%);display:flex;align-items:center;justify-content:center;z-index:9999;}
+.login-box{background:#fff;border-radius:16px;padding:40px;width:360px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.login-box .logo-tag{display:inline-block;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:1px;margin-bottom:8px;}
+.login-box h2{font-size:18px;font-weight:700;margin-bottom:4px;}
+.login-box p{font-size:12px;color:var(--text3);margin-bottom:24px;}
+.login-fg{margin-bottom:14px;}
+.login-fg label{font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:5px;}
+.login-fg input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:"Noto Sans KR",sans-serif;outline:none;background:var(--surface2);color:var(--text);}
+.login-fg input:focus{border-color:var(--accent);}
+.login-btn{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:"Noto Sans KR",sans-serif;transition:background .15s;}
+.login-btn:hover{background:#1d4ed8;}
+.login-err{color:var(--red);font-size:11px;margin-bottom:10px;display:none;}
+.app-wrap{display:none;}
+.app-wrap.show{display:block;}
+.user-info{display:flex;align-items:center;gap:8px;}
+.user-info-name{font-size:12px;font-weight:700;color:var(--text);}
+.user-info-email{font-size:10px;color:var(--text3);}
+.pw-change-link{font-size:10px;color:var(--accent);cursor:pointer;margin-top:4px;}
+.pw-change-link:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <div class="logo-tag">HYDROGEL TF</div>
+    <h2>프로젝트 관리 시스템</h2>
+    <p>R&amp;I 연구소 · 로그인이 필요합니다</p>
+    <div class="login-err" id="login-err"></div>
+    <div class="login-fg"><label>이메일</label><input type="email" id="login-email" placeholder="example@cosmax.com"></div>
+    <div class="login-fg"><label>비밀번호</label><input type="password" id="login-pw" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="login-btn" onclick="doLogin()">로그인</button>
+  </div>
+</div>
+<div class="app-wrap" id="app-wrap">
 <aside class="sidebar">
   <div class="logo">
     <div class="logo-tag">HYDROGEL TF</div>
@@ -180,9 +213,14 @@ tr:hover td{background:rgba(37,99,235,.04);}
     <div class="nav-item" onclick="goPage('monthly',this)"><span class="nav-ic">📆</span>월별현황</div>
   </nav>
   <div class="sidebar-bottom">
-    <select class="user-select" id="user-select" onchange="changeUser(this.value)">
-      <option value="">-- 선택하세요 --</option>
-    </select>
+    <div class="user-info">
+      <div style="flex:1;min-width:0">
+        <div class="user-info-name" id="sidebar-user-name"></div>
+        <div class="user-info-email" id="sidebar-user-email"></div>
+        <div class="pw-change-link" onclick="openPwModal()">비밀번호 변경</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="doLogout()" style="flex-shrink:0">로그아웃</button>
+    </div>
   </div>
 </aside>
 <main class="main">
@@ -206,6 +244,19 @@ tr:hover td{background:rgba(37,99,235,.04);}
     <div class="page" id="pg-actions"></div>
   </div>
 </main>
+</div><!-- /app-wrap -->
+<div class="modal-overlay" id="pw-modal">
+  <div class="modal" style="max-width:380px">
+    <h2>비밀번호 변경</h2>
+    <div class="fg"><label>새 비밀번호</label><input type="password" id="pw-new" placeholder="새 비밀번호 입력"></div>
+    <div class="fg"><label>새 비밀번호 확인</label><input type="password" id="pw-confirm" placeholder="새 비밀번호 다시 입력"></div>
+    <div id="pw-err" style="color:var(--red);font-size:11px;margin-bottom:8px;display:none"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closePwModal()">취소</button>
+      <button class="btn btn-primary" onclick="doChangePw()">변경</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal">
   <div class="modal">
     <h2 id="modal-title">업무 입력</h2>
@@ -264,7 +315,7 @@ tr:hover td{background:rgba(37,99,235,.04);}
 <script>
 const TODAY=new Date(2026,3,13),TODAYSTR="2026-04-13";
 let tasks={},members={},activity=[],comments={};
-let curUser="김혜인",curPage="dashboard",editId=null,editMemberId=null;
+let curUser="",curUserEmail="",curPage="dashboard",editId=null,editMemberId=null;
 function esc(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
 let filterAction="전체",filterTopic="전체",filterPerson="전체",taskSearch="";
 let calY=2026,calM=4;
@@ -290,19 +341,21 @@ const DT=[
   {id:"t16",action:"불량개선(용량)",topic:"레이저",detail:"레이저 - 두께조정자동연동시스템구축",person:"김완중",dept:"R&I",start:"2026-04-29",end:"2026-07-14",content:"두께자동조정시스템 구축",collab:"AI자동화,생산,품질",progress:0,note:""}
 ];
 const DM=[
-  {id:"m1",name:"이준협",dept:"숭실대",role:"교수"},
-  {id:"m2",name:"차지훈",dept:"HG본부",role:"본부장"},
-  {id:"m3",name:"이준배",dept:"R&I",role:"랩장"},
-  {id:"m4",name:"김완중",dept:"R&I",role:"팀장"},
-  {id:"m5",name:"윤석원",dept:"R&I",role:"책임"},
-  {id:"m6",name:"김혜인",dept:"R&I",role:"연구원"},
-  {id:"m7",name:"전명원",dept:"AI자동화",role:"팀장"},
-  {id:"m8",name:"우용호",dept:"품질",role:"파트장"},
-  {id:"m9",name:"오세임",dept:"품질",role:"대리"},
-  {id:"m10",name:"백승현",dept:"공정개발",role:"과장"},
-  {id:"m11",name:"오현우",dept:"공정개발",role:"마스터"},
-  {id:"m12",name:"강창엽",dept:"생산",role:"과장"},
-  {id:"m13",name:"오혜성",dept:"제조",role:"주임"}
+  {id:"m1",name:"이준협",dept:"숭실대",role:"교수",email:"junhyuplee@ssu.ac.kr"},
+  {id:"m2",name:"차지훈",dept:"HG본부",role:"본부장",email:"jihoon@cosmax.com"},
+  {id:"m3",name:"이준배",dept:"R&I",role:"랩장",email:"jblee@cosmax.com"},
+  {id:"m4",name:"김완중",dept:"R&I",role:"팀장",email:"wanjung@cosmax.com"},
+  {id:"m5",name:"윤석원",dept:"R&I",role:"책임",email:"ysw@cosmax.com"},
+  {id:"m6",name:"김혜인",dept:"R&I",role:"연구원",email:"hyein.kim@cosmax.com"},
+  {id:"m7",name:"전명원",dept:"AI자동화",role:"팀장",email:"mwjeon@cosmax.com"},
+  {id:"m8",name:"우용호",dept:"품질",role:"파트장",email:"yhwoo@cosmax.com"},
+  {id:"m9",name:"오세임",dept:"품질",role:"대리",email:"osy0234@cosmax.com"},
+  {id:"m10",name:"백승현",dept:"공정개발",role:"과장",email:"baeksh@cosmax.com"},
+  {id:"m11",name:"오현우",dept:"공정개발",role:"마스터",email:"hooh@cosmax.com"},
+  {id:"m12",name:"강창엽",dept:"생산",role:"과장",email:"kcy0327@kspack.co.kr"},
+  {id:"m13",name:"오혜성",dept:"제조",role:"주임",email:"koreaohs1@cosmax.com"},
+  {id:"m14",name:"신동훈",dept:"AI자동화",role:"팀장",email:"Edwin.Shin@cosmax.com"},
+  {id:"m15",name:"표인필",dept:"R&I",role:"파트장",email:"ippyo@cosmax.com"}
 ];
 function taskArr(){return Object.values(tasks);}
 function memberArr(){return Object.values(members);}
@@ -356,30 +409,81 @@ async function fbSet(path,val){try{if(window._fb){await window._fb.set(window._f
 async function fbRemove(path){try{if(window._fb){await window._fb.remove(window._fb.ref(window._fb.db,path));}}catch(e){console.error("fbRemove error",e);}}
 async function fbPush(path,val){try{if(window._fb){await window._fb.push(window._fb.ref(window._fb.db,path),val);}}catch(e){console.error("fbPush error",e);}}
 async function logActivity(msg){const item={who:curUser,msg,time:timeStr(),ts:Date.now()};activity.unshift(item);if(activity.length>80)activity.pop();await fbPush("activity",item);}
+function findMemberByEmail(email){if(!email)return null;const lower=email.toLowerCase();return memberArr().find(m=>m.email&&m.email.toLowerCase()===lower)||DM.find(m=>m.email&&m.email.toLowerCase()===lower)||null;}
+function showLogin(){document.getElementById("login-screen").style.display="flex";document.getElementById("app-wrap").classList.remove("show");}
+function showApp(user){
+  const m=findMemberByEmail(user.email);
+  curUser=m?m.name:user.email;
+  curUserEmail=user.email;
+  document.getElementById("sidebar-user-name").textContent=curUser;
+  document.getElementById("sidebar-user-email").textContent=user.email;
+  document.getElementById("login-screen").style.display="none";
+  document.getElementById("app-wrap").classList.add("show");
+  renderAll();
+}
+async function doLogin(){
+  const email=document.getElementById("login-email").value.trim();
+  const pw=document.getElementById("login-pw").value;
+  const errEl=document.getElementById("login-err");
+  errEl.style.display="none";
+  if(!email||!pw){errEl.textContent="이메일과 비밀번호를 입력하세요";errEl.style.display="block";return;}
+  try{
+    await window._fb.signInWithEmailAndPassword(window._fb.auth,email,pw);
+  }catch(e){
+    console.error("Login error:",e.code);
+    if(e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/user-not-found")errEl.textContent="이메일 또는 비밀번호가 올바르지 않습니다";
+    else if(e.code==="auth/too-many-requests")errEl.textContent="로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요";
+    else errEl.textContent="로그인 실패: "+e.message;
+    errEl.style.display="block";
+  }
+}
+async function doLogout(){
+  try{await window._fb.signOut(window._fb.auth);}catch(e){console.error("Logout error:",e);}
+}
+function openPwModal(){document.getElementById("pw-new").value="";document.getElementById("pw-confirm").value="";document.getElementById("pw-err").style.display="none";document.getElementById("pw-modal").classList.add("open");}
+function closePwModal(){document.getElementById("pw-modal").classList.remove("open");}
+async function doChangePw(){
+  const nw=document.getElementById("pw-new").value;
+  const cf=document.getElementById("pw-confirm").value;
+  const errEl=document.getElementById("pw-err");
+  errEl.style.display="none";
+  if(!nw||nw.length<4){errEl.textContent="비밀번호는 4자 이상 입력하세요";errEl.style.display="block";return;}
+  if(nw!==cf){errEl.textContent="비밀번호가 일치하지 않습니다";errEl.style.display="block";return;}
+  try{
+    await window._fb.updatePassword(window._fb.auth.currentUser,nw);
+    closePwModal();toast("비밀번호가 변경되었습니다");
+  }catch(e){
+    console.error("PW change error:",e);
+    if(e.code==="auth/requires-recent-login")errEl.textContent="보안을 위해 다시 로그인 후 변경해주세요";
+    else errEl.textContent="변경 실패: "+e.message;
+    errEl.style.display="block";
+  }
+}
 function startApp(){
   DT.forEach(t=>{tasks[t.id]=t;});
   DM.forEach(m=>{members[m.id]=m;});
   setSyncStatus("demo");
-  populateUserSelect();
-  renderAll();
-  // Firebase 모듈이 로드되면 즉시 연결, 아직이면 콜백 등록
+  // Firebase 모듈이 로드되면 인증 상태 감시 시작
   if(window._fb_ready && window._fb){
-    initFirebase();
+    initAuth();
   } else {
-    window._fb_callback = ()=>{ if(window._fb) initFirebase(); };
-    // 폴링 백업 (콜백 놓친 경우)
+    window._fb_callback = ()=>{ if(window._fb) initAuth(); };
     let tries=0;
     const poll=setInterval(()=>{
-      if(window._fb){clearInterval(poll);initFirebase();}
+      if(window._fb){clearInterval(poll);initAuth();}
       if(++tries>20){clearInterval(poll);setSyncStatus("err");}
     },500);
   }
 }
+function initAuth(){
+  window._fb.onAuthStateChanged(window._fb.auth,(user)=>{
+    if(user){showApp(user);initFirebase();}
+    else{showLogin();}
+  });
+}
 window.addEventListener("DOMContentLoaded",()=>startApp());
-function populateUserSelect(){const sel=document.getElementById("user-select");const prev=sel.value||curUser;sel.innerHTML=memberArr().sort((a,b)=>a.name.localeCompare(b.name,"ko")).map(m=>"<option value=\""+esc(m.name)+"\""+( m.name===prev?" selected":"")+">"+esc(m.name)+" ("+esc(m.role)+")</option>").join("");if(sel.value)curUser=sel.value;}
-function changeUser(v){if(!v)return;curUser=v;toast(v+"(으)로 전환되었습니다");}
 function goPage(id,el){document.querySelectorAll(".nav-item").forEach(n=>n.classList.remove("active"));el.classList.add("active");document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));document.getElementById("pg-"+id).classList.add("active");const names={dashboard:"대시보드",gantt:"간트차트",calendar:"캘린더",tasks:"업무관리",members:"인원정보",actions:"액션아이템 관리",dept:"부서별 관리",person:"담당자별 관리",activity:"활동 로그",comments:"댓글",monthly:"월별 현황"};document.getElementById("ptitle").textContent=names[id]||id;curPage=id;renderPage(id);}
-function renderAll(){document.getElementById("nb-task").textContent=taskArr().length;populateUserSelect();renderPage(curPage);}
+function renderAll(){document.getElementById("nb-task").textContent=taskArr().length;renderPage(curPage);}
 function renderPage(p){if(p==="dashboard")renderDash();else if(p==="gantt")renderGantt();else if(p==="calendar")renderCal();else if(p==="tasks")renderTasks();else if(p==="members")renderMembers();else if(p==="actions")renderActions();else if(p==="dept")renderDept();else if(p==="person")renderPerson();else if(p==="activity")renderActivity();else if(p==="comments")renderComments();else if(p==="monthly")renderMonthly();}
 function renderDash(){const arr=taskArr();const ongoing=arr.filter(t=>getStatus(t)==="ongoing").length;const done=arr.filter(t=>getStatus(t)==="done").length;const delay=arr.filter(t=>getStatus(t)==="delay").length;const pmap={},amap={},tmap={};arr.forEach(t=>{pmap[t.person]=(pmap[t.person]||0)+1;amap[t.action]=(amap[t.action]||0)+1;const tp=t.topic||"미분류";tmap[tp]=(tmap[tp]||0)+1;});const maxP=Math.max(...Object.values(pmap),1);const maxT=Math.max(...Object.values(tmap),1);const active=arr.filter(t=>getStatus(t)==="ongoing"||getStatus(t)==="delay");document.getElementById("pg-dashboard").innerHTML='<div class="stat-grid"><div class="stat-card blue"><div class="stat-label">전체 업무</div><div class="stat-value">'+arr.length+'</div><div class="stat-sub">등록된 프로젝트</div></div><div class="stat-card blue"><div class="stat-label">진행중</div><div class="stat-value">'+ongoing+'</div><div class="stat-sub">현재 진행 중</div></div><div class="stat-card green"><div class="stat-label">완료</div><div class="stat-value">'+done+'</div><div class="stat-sub">완료된 업무</div></div><div class="stat-card red"><div class="stat-label">지연</div><div class="stat-value">'+delay+'</div><div class="stat-sub">기한 초과</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px"><div class="tbl-wrap" style="padding:16px"><div class="sec-title" style="margin-bottom:12px">담당자별 업무량</div>'+Object.entries(pmap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:26px;height:26px;border-radius:50%;background:'+avColor(k)+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">'+esc(k[0])+'</div><div style="flex:1;min-width:0"><div style="font-size:12px;margin-bottom:2px">'+esc(k)+'</div><div style="height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden"><div style="height:100%;background:'+avColor(k)+';width:'+(v/maxP*100)+'%;border-radius:2px"></div></div></div><span style="font-size:11px;color:var(--text3)">'+v+"</span></div>").join("")+'</div><div class="tbl-wrap" style="padding:16px"><div class="sec-title" style="margin-bottom:12px">주제별 현황</div>'+Object.entries(tmap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{const topicTasks=arr.filter(t=>(t.topic||"미분류")===k);const topicDone=topicTasks.filter(t=>getStatus(t)==="done").length;const topicProg=topicTasks.length?Math.round(topicTasks.reduce((s,t)=>s+t.progress,0)/topicTasks.length*100):0;return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:12px;flex:1;font-weight:500">'+esc(k)+'</div><div style="height:4px;width:80px;background:#e5e7eb;border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent);width:'+topicProg+'%"></div></div><span style="font-size:10px;color:var(--text3);white-space:nowrap">'+topicProg+"% · "+v+"건</span></div>";}).join("")+'</div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px"><div class="tbl-wrap" style="padding:16px"><div class="sec-title" style="margin-bottom:12px">액션아이템 분포</div>'+Object.entries(amap).map(([k,v])=>'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="width:8px;height:8px;border-radius:50%;background:'+(AC[k]||"#888")+';flex-shrink:0"></div><div style="font-size:12px;flex:1">'+esc(k)+'</div><div style="height:4px;width:80px;background:#e5e7eb;border-radius:2px;overflow:hidden"><div style="height:100%;background:'+(AC[k]||"#888")+';width:'+(v/arr.length*100)+'%"></div></div><span style="font-size:11px;color:var(--text3)">'+v+"</span></div>").join("")+'</div><div class="tbl-wrap" style="padding:16px"><div class="sec-title" style="margin-bottom:8px">최근 활동</div>'+( activity.slice(0,4).map(a=>'<div style="font-size:11px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border)"><strong style="color:var(--text)">'+esc(a.who)+"</strong> "+esc(a.msg)+'<span style="color:var(--text3);float:right">'+esc(a.time)+"</span></div>").join("")||'<div style="font-size:11px;color:var(--text3)">활동 없음</div>')+'</div></div><div class="sec-hd"><div class="sec-title">진행중/지연 업무 ('+ active.length+'건)</div></div><div class="tbl-wrap"><table><thead><tr><th>액션</th><th>주제</th><th>세부내용</th><th>담당자</th><th>종료일</th><th>진행률</th><th>상태</th></tr></thead><tbody>'+(active.length?active.map(t=>'<tr><td>'+actionTag(t.action)+'</td><td style="font-size:12px;font-weight:500">'+esc(t.topic||"-")+'</td><td style="max-width:200px"><div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.detail)+'</div><div style="font-size:10px;color:var(--text3)">'+esc(t.content)+'</div></td><td><div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:50%;background:'+avColor(t.person)+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff">'+esc(t.person[0])+'</div>'+esc(t.person)+'</div></td><td style="font-size:11px;color:var(--text2)">'+esc(t.end)+"</td><td>"+progressCell(t)+"</td><td>"+statusBadge(t)+"</td></tr>").join(""):'<tr><td colspan="7" class="empty">진행중인 업무 없음</td></tr>')+'</tbody></table></div>';}
 function renderGantt(){const arr=taskArr();const acts=["전체",...new Set(arr.map(t=>t.action))];const topics=["전체",...new Set(arr.map(t=>t.topic||"미분류"))];const ppl=["전체",...new Set(arr.map(t=>t.person))];const filtered=arr.filter(t=>(filterAction==="전체"||t.action===filterAction)&&(filterTopic==="전체"||(t.topic||"미분류")===filterTopic)&&(filterPerson==="전체"||t.person===filterPerson)&&(!taskSearch||t.detail.includes(taskSearch)||t.person.includes(taskSearch)||(t.topic||"").includes(taskSearch)));const allD=filtered.flatMap(t=>[new Date(t.start),new Date(t.end)]);const minD=allD.length?new Date(Math.min(...allD)):new Date(2026,3,1);const maxD=allD.length?new Date(Math.max(...allD)):new Date(2026,6,30);minD.setDate(minD.getDate()-5);maxD.setDate(maxD.getDate()+5);const span=maxD-minD;const todayPct=Math.max(0,Math.min(100,(TODAY-minD)/span*100));const grouped={};filtered.forEach(t=>{const tp=t.topic||"미분류";if(!grouped[tp])grouped[tp]=[];grouped[tp].push(t);});let ganttRows="";Object.entries(grouped).forEach(([tp,tks])=>{ganttRows+='<div style="font-size:12px;font-weight:700;color:var(--accent);padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px">'+esc(tp)+" ("+tks.length+"건)</div>";tks.forEach(t=>{const s=new Date(t.start),e=new Date(t.end);const left=(s-minD)/span*100,width=Math.max(1,(e-s)/span*100);const st=getStatus(t);const bc=st==="done"?"#1D9E75":st==="delay"?"#E24B4A":st==="ongoing"?"#2563eb":"#9ca3af";ganttRows+='<div class="tl-row"><div class="tl-label" title="'+esc(t.person)+": "+esc(t.detail)+'">'+esc(t.person)+": "+esc(t.detail.length>18?t.detail.slice(0,16)+"…":t.detail)+'</div><div class="tl-track" onclick="openEditModal(\''+t.id+'\')"><div class="tl-today" style="left:'+todayPct+'%"></div><div class="tl-bar" style="left:'+left+"%;width:"+width+"%;background:"+bc+'">'+esc(width>8?t.detail.slice(0,12):"")+"</div></div></div>";});});document.getElementById("pg-gantt").innerHTML='<div class="filter-bar">'+acts.map(a=>'<button class="filter-btn '+(filterAction===a?"on":"")+'" onclick="setAF(\''+esc(a)+'\')">'+ esc(a)+"</button>").join("")+'<span style="color:var(--border);font-size:16px;padding:0 4px">|</span>'+topics.map(tp=>'<button class="filter-btn '+(filterTopic===tp?"on":"")+'" onclick="setTF(\''+esc(tp)+'\')">'+ esc(tp)+"</button>").join("")+'<span style="color:var(--border);font-size:16px;padding:0 4px">|</span>'+ppl.map(p=>'<button class="filter-btn '+(filterPerson===p?"on":"")+'" onclick="setPF(\''+esc(p)+'\')">'+ esc(p)+"</button>").join("")+'<input class="search-inp" style="margin-left:auto" placeholder="검색..." value="'+esc(taskSearch)+'" oninput="setSR(this.value)"></div><div class="tbl-wrap" style="padding:16px;overflow-x:auto"><div style="min-width:500px">'+ganttRows+(!filtered.length?'<div class="empty">해당 조건의 업무 없음</div>':"")+'</div></div>';}
@@ -416,6 +520,7 @@ function setTF(t){filterTopic=t;renderPage(curPage);}
 function setPF(p){filterPerson=p;renderPage(curPage);}
 function setSR(v){taskSearch=v;renderPage(curPage);}
 function toast(msg,ok=true){const el=document.getElementById("toast");el.textContent=msg;el.style.borderColor=ok?"var(--green)":"var(--red)";el.classList.add("show");setTimeout(()=>el.classList.remove("show"),2800);}
+document.getElementById("pw-modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closePwModal();});
 document.getElementById("modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeModal();});
 document.getElementById("member-modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeMemberModal();});
 document.getElementById("action-modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeActionModal();});
