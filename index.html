@@ -482,9 +482,11 @@ function startApp(){
   }
 }
 function initAuth(){
+  let loginTimeout=null;
   window._fb.onAuthStateChanged(window._fb.auth,(user)=>{
+    if(loginTimeout){clearTimeout(loginTimeout);loginTimeout=null;}
     if(user){showApp(user);initFirebase();}
-    else{showLogin();}
+    else{loginTimeout=setTimeout(()=>showLogin(),500);}
   });
 }
 window.addEventListener("DOMContentLoaded",()=>startApp());
