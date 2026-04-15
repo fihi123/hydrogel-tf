@@ -316,6 +316,7 @@ tr:hover td{background:rgba(37,99,235,.04);}
 const TODAY=new Date(2026,3,13),TODAYSTR="2026-04-13";
 let tasks={},members={},activity=[],comments={};
 let curUser="",curUserEmail="",curPage="dashboard",editId=null,editMemberId=null;
+let firebaseLoaded=false;
 function esc(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
 let filterAction="전체",filterTopic="전체",filterPerson="전체",taskSearch="";
 let calY=2026,calM=4;
@@ -367,22 +368,26 @@ function statusBadge(t){const s=getStatus(t);if(s==="done")return'<span class="b
 function actionTag(a){const c=AC[a]||"#888";return'<span class="action-tag" style="background:'+c+'20;color:'+c+'">'+esc(a)+"</span>";}
 function progressCell(t){const p=Math.round(t.progress*100);return'<div class="prog-cell"><div class="prog-bar-bg"><div class="prog-bar" style="width:'+p+'%"></div></div><input type="range" class="prog-slider" min="0" max="100" value="'+p+'" oninput="this.previousElementSibling.querySelector(\'.prog-bar\').style.width=this.value+\'%\';this.nextElementSibling.textContent=this.value+\'%\'" onchange="updateProgress(\''+t.id+'\',this.value)"><span class="prog-pct">'+p+'%</span></div>';}
 async function updateProgress(id,val){const p=parseInt(val)/100,old=tasks[id];if(!old)return;tasks[id]={...old,progress:p};await fbSet("tasks/"+id+"/progress",p);await logActivity('"'+(old.detail||"").slice(0,20)+'" 진행률 '+parseInt(val)+"%로 업데이트");toast((old.person||"")+" 진행률 "+parseInt(val)+"%로 업데이트");}
-function setSyncStatus(s){const el=document.getElementById("sync-badge");if(s==="ok"){el.className="sync-badge sync-ok";el.innerHTML="● 실시간 공유중";}else if(s==="demo"){el.className="sync-badge sync-wait";el.innerHTML="◎ 로컬 모드";}else{el.className="sync-badge sync-err";el.innerHTML='<span class="pulse">●</span> 연결 오류';}}
+function setSyncStatus(s){const el=document.getElementById("sync-badge");if(s==="ok"){el.className="sync-badge sync-ok";el.innerHTML="● 실시간 공유중";}else if(s==="demo"){el.className="sync-badge sync-wait";el.innerHTML="◎ 로컬 모드 (로그인 필요)";}else{el.className="sync-badge sync-err";el.innerHTML='<span class="pulse">●</span> 연결 오류 — 데이터가 최신이 아닐 수 있습니다';}}
+let firebaseInitialized=false;
 function initFirebase(){
   const fb=window._fb;
   if(!fb||!fb.onValue){console.warn("FB not ready");setSyncStatus("demo");return;}
+  if(firebaseInitialized){console.log("Firebase 이미 연결됨, 스킵");renderAll();return;}
+  firebaseInitialized=true;
   console.log("Firebase 연결 시작...");
   let connected=false;
   const connTimeout=setTimeout(()=>{if(!connected){setSyncStatus("err");}},10000);
   fb.onValue(fb.tasksRef,snap=>{
     connected=true;clearTimeout(connTimeout);
     const d=snap.val();
-    if(d){tasks=d;}else{const o={};DT.forEach(t=>{o[t.id]=t;});fb.set(fb.tasksRef,o);}
+    if(d){tasks=d;firebaseLoaded=true;}else if(!firebaseLoaded){const o={};DT.forEach(t=>{o[t.id]=t;});fb.set(fb.tasksRef,o);firebaseLoaded=true;}
     renderAll();setSyncStatus("ok");
   },err=>{console.error("tasks listener error",err);clearTimeout(connTimeout);setSyncStatus("err");});
+  let membersLoaded=false;
   fb.onValue(fb.membersRef,snap=>{
     const d=snap.val();
-    if(d){members=d;}else{const o={};DM.forEach(m=>{o[m.id]=m;});fb.set(fb.membersRef,o);}
+    if(d){members=d;membersLoaded=true;}else if(!membersLoaded){const o={};DM.forEach(m=>{o[m.id]=m;});fb.set(fb.membersRef,o);membersLoaded=true;}
     populateUserSelect();
     if(curPage==="members")renderPage("members");
   },err=>{console.error("members listener error",err);});
@@ -462,6 +467,7 @@ async function doChangePw(){
 function startApp(){
   DT.forEach(t=>{tasks[t.id]=t;});
   DM.forEach(m=>{members[m.id]=m;});
+  firebaseLoaded=false;
   setSyncStatus("demo");
   // Firebase 모듈이 로드되면 인증 상태 감시 시작
   if(window._fb_ready && window._fb){
@@ -507,6 +513,7 @@ function openEditModal(id){const t=tasks[id];if(!t)return;editId=id;document.get
 function closeModal(){document.getElementById("modal").classList.remove("open");}
 async function saveTask(){const action=document.getElementById("f-action").value;const topic=document.getElementById("f-topic").value.trim();const detail=document.getElementById("f-detail").value.trim();const person=document.getElementById("f-person").value;const dept=document.getElementById("f-dept").value;const start=document.getElementById("f-start").value;const end=document.getElementById("f-end").value;const content=document.getElementById("f-content").value.trim();const collab=document.getElementById("f-collab").value.trim();const note=document.getElementById("f-note").value.trim();const progress=Math.min(1,Math.max(0,(parseInt(document.getElementById("f-progress").value)||0)/100));if(!detail||!start||!end){toast("세부내용, 시작/종료일을 입력하세요",false);return;}if(editId){const u={...tasks[editId],action,topic,detail,person,dept,start,end,content,collab,note,progress};tasks[editId]=u;await fbSet("tasks/"+editId,u);await logActivity("\""+detail.slice(0,20)+"\" 수정");toast("업무가 수정되었습니다");}else{const id="t"+Date.now();const nt={id,action,topic,detail,person,dept,start,end,content,collab,note,progress};tasks[id]=nt;await fbSet("tasks/"+id,nt);await logActivity("\""+detail.slice(0,20)+"\" 업무 추가");document.getElementById("nb-task").textContent=taskArr().length;toast("업무가 추가되었습니다");}closeModal();renderAll();}
 async function confirmDelete(){if(!editId)return;if(!confirm("이 업무를 삭제하시겠습니까?"))return;const detail=tasks[editId]?.detail||"";delete tasks[editId];await fbRemove("tasks/"+editId);await logActivity("\""+detail.slice(0,20)+"\" 삭제");document.getElementById("nb-task").textContent=taskArr().length;toast("삭제되었습니다");closeModal();renderAll();}
+function populateUserSelect(){const sel=document.getElementById("f-person");if(!sel)return;const prev=sel.value;sel.innerHTML=memberArr().map(m=>"<option value=\""+esc(m.name)+"\""+( m.name===prev?" selected":"")+">"+esc(m.name)+" ("+esc(m.dept)+" · "+esc(m.role)+")</option>").join("");}
 function populateActionSelect(){const sel=document.getElementById("f-action");if(!sel)return;const prev=sel.value;sel.innerHTML=Object.keys(AC).map(a=>"<option value=\""+esc(a)+"\""+( a===prev?" selected":"")+">"+esc(a)+"</option>").join("");if(prev&&!AC[prev]&&sel.options.length)sel.selectedIndex=0;}
 let editActionName=null;
 function renderActions(){const entries=Object.entries(AC);document.getElementById("pg-actions").innerHTML='<div class="sec-hd"><div class="sec-title">액션아이템 목록 ('+entries.length+'개)</div><button class="btn btn-primary btn-sm" onclick="openAddActionModal()">+ 액션아이템 추가</button></div><div class="tbl-wrap"><table><thead><tr><th>액션아이템명</th><th>색상</th><th>사용중 업무</th><th></th></tr></thead><tbody>'+(entries.length?entries.map(([name,color])=>{const cnt=taskArr().filter(t=>t.action===name).length;return'<tr><td>'+actionTag(name)+'</td><td><div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:16px;border-radius:4px;background:'+esc(color)+'"></div><span style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace">'+esc(color)+'</span></div></td><td style="font-size:12px">'+cnt+'건</td><td><button class="btn btn-ghost btn-sm" onclick="openEditActionModal(\''+esc(name.replace(/'/g,"\\'"))+'\')">수정</button></td></tr>';}).join(""):'<tr><td colspan="4" class="empty">액션아이템 없음</td></tr>')+'</tbody></table></div>';}
