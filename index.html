@@ -527,7 +527,7 @@ async function confirmDeleteAction(){if(!editActionName)return;const cnt=taskArr
 function setAF(a){filterAction=a;renderPage(curPage);}
 function setTF(t){filterTopic=t;renderPage(curPage);}
 function setPF(p){filterPerson=p;renderPage(curPage);}
-function setSR(v){taskSearch=v;renderPage(curPage);}
+function setSR(v){if(v&&v.includes("@"))return;taskSearch=v;renderPage(curPage);}
 function toast(msg,ok=true){const el=document.getElementById("toast");el.textContent=msg;el.style.borderColor=ok?"var(--green)":"var(--red)";el.classList.add("show");setTimeout(()=>el.classList.remove("show"),2800);}
 document.getElementById("pw-modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closePwModal();});
 document.getElementById("modal").addEventListener("click",e=>{if(e.target===e.currentTarget)closeModal();});
